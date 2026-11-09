@@ -4,7 +4,7 @@ A imagem (IFS de boot com os patches, flash NOR de 128 MB com IFS2 e EFS_RO) é 
 swfl_000003a6 (e do 417) e é compartilhada entre os ambientes. O QEMU (placa `cic`, bin/qemu-system-sh4) grava a tela composta em
 frame.rgb (CIC_FRAME) e recebe rotor/teclas por um socket (CIC_INPUT). Detalhes em docs/IDRIVE4.md.
 """
-import glob, importlib.util, json, os, shutil, socket, subprocess, threading, time
+import collections, glob, importlib.util, json, os, shutil, socket, subprocess, threading, time
 from . import runtime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -107,7 +107,7 @@ class CicRuntime(runtime.Runtime):
         if subprocess.call(['cp', '-c', os.path.join(OUT, 'flash.img'), fl], stderr=subprocess.DEVNULL) != 0:
             shutil.copyfile(os.path.join(OUT, 'flash.img'), fl)
         self.state = 'booting'; self.err = None; self.t0 = time.time(); self.marks = {}; self.step = 'Iniciando o QEMU'; self.pct = 2
-        self._fm = None; self._lastseq = None; self.fps_t = []; self.boot_kind = 'cold'; self.stop_ev.clear()
+        self._fm = None; self._lastseq = None; self.fps_t = collections.deque(maxlen=400); self.boot_kind = 'cold'; self.stop_ev.clear()
         threading.Thread(target=self._boot_thread, daemon=True).start()
 
     def _links(self):
@@ -127,7 +127,7 @@ class CicRuntime(runtime.Runtime):
             self.zbe = VirtualZBE(self.run, self.send_cmd)
             env.pop('CIC_DISPLAY', None)
             out = open(os.path.join(self.run, 'qemu.out'), 'wb')
-            self.q = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, env=env)
+            self._spawn('q', cmd, stdout=out, stderr=subprocess.STDOUT, env=env)
             self._links()
             slog = os.path.join(self.run, 'ser0.txt'); seen = set(); end = time.time() + 420
             while not self.stop_ev.is_set():

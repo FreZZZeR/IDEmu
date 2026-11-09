@@ -92,6 +92,9 @@ class Qmp:
 
 SNAP_FORMAT = 2
 
+class BootStopped(Exception):
+    """O usuário parou o ambiente no meio do boot: o thread de boot só sai, sem marcar erro."""
+
 class Runtime:
     def __init__(self, env_dir, env, run_root=None):
         self.env_dir, self.env = env_dir, env
@@ -103,7 +106,7 @@ class Runtime:
         self.gl = self.q = None; self.mux = None; self.can = self.gps = self.ssh = None
         self.frame_path = os.path.join(self.run, 'frame.rgb'); self._fm = None
         self._png = (None, None); self.con = collections.deque(maxlen=2000)
-        self._cmd_lock = threading.Lock(); self.fps_t = []
+        self._cmd_lock = threading.Lock(); self.fps_t = collections.deque(maxlen=400); self._life = threading.Lock()
         self.stop_ev = threading.Event(); self.marks = {}
         self.snap_dir = os.path.join(env_dir, 'snapshot'); self.qmp = None; self.boot_kind = None; self.cpu_pct = 100.0
 
@@ -146,7 +149,7 @@ class Runtime:
                 raise RuntimeError('imagem ausente (%s): compile o ambiente primeiro' % n)
         import shutil
         shutil.rmtree(self.run, ignore_errors=True); os.makedirs(self.ctl); os.makedirs(self.logd, exist_ok=True)
-        self.state = 'booting'; self.err = None; self.t0 = time.time(); self.marks = {}; self.step = 'Iniciando'; self.pct = 1; self._fm = None; self._lastseq = None; self.fps_t = []
+        self.state = 'booting'; self.err = None; self.t0 = time.time(); self.marks = {}; self.step = 'Iniciando'; self.pct = 1; self._fm = None; self._lastseq = None; self.fps_t = collections.deque(maxlen=400)
         self.stop_ev.clear()
         threading.Thread(target=self._boot, daemon=True).start()
 
@@ -166,7 +169,7 @@ class Runtime:
         if record:
             os.makedirs(self.snap_dir, exist_ok=True); env['GLHOST_RECORD'] = S + 'gl.rec.tmp'
         self.step = 'Iniciando renderizador'; self.pct = 3
-        self.gl = subprocess.Popen([B + 'glhost'], env=env, stdout=self._log('renderer.log'), stderr=subprocess.STDOUT, cwd=B)
+        self._spawn('gl', [B + 'glhost'], env=env, stdout=self._log('renderer.log'), stderr=subprocess.STDOUT, cwd=B)
         I = self.img + '/'
         args = [B + 'qemu-system-arm', '-M', 'omap5-uevm', '-m', '2048', '-cpu', os.environ.get('IDEMU_CPU', CPU), '-display', 'none',
                 '-serial', 'unix:%s,server,nowait' % ser, '-serial', 'unix:%s,server,nowait' % ser2,
@@ -186,7 +189,7 @@ class Runtime:
                      '-device', 'loader,file=%sshim.img,addr=0x7e000000' % I]
         args += shlex.split(os.environ.get('IDEMU_QEMU_EXTRA', ''))
         self.step = 'Iniciando QEMU'; self.pct = 5
-        self.q = subprocess.Popen(args, env=env, stdout=self._log('qemu.log'), stderr=subprocess.STDOUT)
+        self._spawn('q', args, env=env, stdout=self._log('qemu.log'), stderr=subprocess.STDOUT)
         self.ser4 = ser4
         self.qmp = Qmp(R + 'qmp.sock')
         return ser, ser2, ser1
@@ -202,9 +205,12 @@ class Runtime:
                     self.drop_snapshot(); self._kill_children()
                     self._reset_run()
             self._boot_cold()
+            if self.state == 'error' and not self.stop_ev.is_set(): self._kill_children()      # renderizador ou QEMU caiu: não deixa o resto (portas CAN/GPS, sshd, V850) para trás
+        except BootStopped: pass
         except Exception as e:
             if not self.stop_ev.is_set():
                 self.state = 'error'; self.err = '%s: %s' % (type(e).__name__, e)
+                self._kill_children()
             self.stop_ev.set()
 
     def _reset_run(self):
@@ -313,6 +319,7 @@ class Runtime:
                         self._save_snapshot()
                     except Exception as e:
                         self.con.append('[idemu] snapshot não criado: %s: %s' % (type(e).__name__, e)); self.drop_snapshot()
+                if self.stop_ev.is_set(): return                  # parado durante o snapshot: não volta para "em execução"
                 self.state = 'running'; self.pct = 100; self.step = 'Em execução'; self._mark('running')
             elif not ready and hmi_t[0]:
                 self.pct = min(90, 55 + int((time.time() - hmi_t[0]) / 30.0 * 35))
@@ -462,9 +469,17 @@ class Runtime:
             ok, msg = self.ssh.start(); self.con.append('[idemu] ssh: %s' % msg)
         except Exception as e:
             self.con.append('[idemu] SSH: %s' % e)
+        if self.stop_ev.is_set(): self._kill_children()       # parado enquanto os serviços subiam
+
+    def _spawn(self, attr, *a, **kw):
+        """Popen que não deixa processo órfão: com o ambiente já parado, não inicia; o processo novo fica em self.<attr> antes que stop() possa olhar."""
+        with self._life:
+            if self.stop_ev.is_set(): raise BootStopped()
+            p = subprocess.Popen(*a, **kw); setattr(self, attr, p)
+            return p
 
     def stop(self):
-        self.stop_ev.set()
+        with self._life: self.stop_ev.set()
         self._kill_children()
         self.state = 'stopped'; self.pct = 0; self.step = ''
 
@@ -497,8 +512,10 @@ class Runtime:
                 'frame_seq': self.frame_seq(), 'fps': self._fps(), 'error': self.err, 'boot_kind': self.boot_kind, 'marks': self.marks}
 
     def _fps(self):
-        now = time.time(); self.fps_t = [t for t in self.fps_t if now - t < 3]
-        return round(len(self.fps_t) / 3.0, 1)
+        now = time.time(); ft = self.fps_t
+        if not isinstance(ft, collections.deque): ft = self.fps_t = collections.deque(ft, maxlen=400)
+        while ft and now - ft[0] >= 3: ft.popleft()
+        return round(len(ft) / 3.0, 1)
 
     # ---------- quadro de vídeo ----------
     def _map(self):

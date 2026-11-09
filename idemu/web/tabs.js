@@ -616,7 +616,7 @@
 
   /* ====================================================================== Logs */
   IDE.tabDefs.logs = {
-    mount(host) {
+    mount(host, ctx) {
       let stop = null, last = '';
       const sel = h('select', { class: 'input sm', 'aria-label': 'Log' }, [['console', 'Console'], ['qemu', 'QEMU'], ['renderer', 'Renderizador'], ['v850', 'V850'], ['guest', 'Sistema convidado']].map(([v, l]) => h('option', { value: v }, l)));
       sel.value = IDE.pref.get('logs.name', 'console');
@@ -639,7 +639,7 @@
         status.textContent = IDE.t('{n} linhas', { n: shown.length });
       }
       async function load() {
-        const d = await api('/api/logs?' + IDE.qs({ name: sel.value, tail: tail.value }));
+        const d = await api('/api/logs?' + IDE.qs({ name: sel.value, tail: tail.value, env: ((ctx && ctx.status()) || {}).env || null }));
         lines = d.lines || []; paint();
       }
       function restart() { if (stop) stop(); stop = null; if (autoCb.checked && shown) stop = IDE.loop(load, 2000); else if (shown) load().catch(() => {}); }

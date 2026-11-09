@@ -298,6 +298,15 @@ select.input option { background: #2a2a2d; }
 .bmw-bezel[data-k=rse] { max-width: 520px; margin-left: auto; margin-right: auto; }
 .bmw-bezel[data-k=cic] .bezel-photo { aspect-ratio: 990 / 335; }
 .bmw-bezel[data-k=cic] .bezel-hole { left: 19.29%; top: 24.48%; width: 61.21%; height: 67.76%; }
+/* "Só a tela": sem a foto da central, a imagem ocupa a largura do cartão na proporção real do display */
+.disp-meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.frame-seg { display: inline-grid; grid-template-columns: auto auto; gap: 2px; padding: 2px; }
+.frame-seg .segb { height: 24px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+.bmw-bezel.plain { margin: 0; border-radius: 0 0 20px 20px; box-shadow: none; background: #000; max-width: none; }
+.bmw-bezel.plain .bezel-photo, .bmw-bezel.plain .glare { display: none; }
+.bmw-bezel.plain .bezel-hole { position: static; width: auto; height: auto; container-type: normal; border-radius: 0; box-shadow: none; }
+.bmw-bezel.plain .bezel-hole .display-wrap { width: 100%; max-height: 78vh; max-width: calc(78vh * var(--ar, 2.6667)); margin: 0 auto; }
+@media (max-width: 700px) { .disp-meta > .muted { display: none; } }
 
 /* ---------------------------------------------------------------- VIN, tipo de head unit e arquivos do sistema (envtools.js) */
 .vin-sec h3 { display: flex; align-items: center; gap: 6px; }

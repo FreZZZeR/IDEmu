@@ -119,7 +119,9 @@ class MostBridge(object):
             return
         self.msgs.append(h)
         del self.msgs[:-60]
-        if h['id'] == 0x8001 and len(h['payload']) >= 33:
+        # 29 = id do cliente (4) + cabeçalho da MessageType (25), sem dados. Com o mínimo antigo (33) os telegramas com menos de 4 bytes de dados (o Set do modo do mapa,
+        # MapControl 0x222, leva 1 byte; os Get, 0 ou 1) iam só para o log e nunca eram respondidos: a tile Navegação da tela inicial ficava preta (docs/V850.md, "Mapa")
+        if h['id'] == 0x8001 and len(h['payload']) >= 29:
             try:
                 self.on_most(MostMessage.parse(h['payload'], 4))
             except Exception as e:          # um telegrama estranho nunca derruba o enlace
@@ -141,7 +143,8 @@ class MostBridge(object):
         with getattr(self, '_cv', threading.Condition()):
             frames = [f.hex() for f in q.values()]
         return {'hello': self.hello is not None, 'client': self.CLIENT, 'device_id': self.device_id, 'subs': [[k[0], k[1], {'%x' % f: d for f, d in v.items()}] for k, v in self.subs.items()],
-                'acked': [list(k) for k in self._acked], 'sent': [[k[0], k[1], k[2], v.hex()] for k, v in self.car._sent.items()], 'avg_speed': self.car.avg_speed, 'avg_cons': self.car.avg_cons, 'pending': frames}
+                'acked': [list(k) for k in self._acked], 'sent': [[k[0], k[1], k[2], v.hex()] for k, v in self.car._sent.items()], 'avg_speed': self.car.avg_speed, 'avg_cons': self.car.avg_cons,
+                'trip': [self.car.trip_start, self.car.trip_odo], 'pending': frames}
 
     def import_state(self, d):
         self.hello = {} if d['hello'] else None      # já registrado: o `most` não vai repetir o "hello"
@@ -150,6 +153,7 @@ class MostBridge(object):
         self.car._sent = {(a, b, c): bytes.fromhex(v) for a, b, c, v in d['sent']}
         self._acked = {tuple(k): time.time() for k in d.get('acked', ())}
         self.car.avg_speed, self.car.avg_cons = d['avg_speed'], d['avg_cons']
+        self.car.trip_start, self.car.trip_odo = d.get('trip') or (None, None)
         for f in d.get('pending', ()):
             self._enqueue(bytes.fromhex(f))
 
@@ -170,6 +174,9 @@ class MostBridge(object):
                     (0x15, 2), (0x15, 3), (0x15, 12), (0xE1, 0))
     # navegação (com NAVI_VARIANTE != keine_navi): Navigation (posição/GPS bruto) e NavigationInfo (posição+rumo+velocidade). IDEMU_NAV_DEVICES=0 não os registra no boot
     NAV_DEVICES = ((0x52, 0), (0xCD, 1), (0xCD, 3), (0xDA, 1))
+    # telefone: Bluetooth (0x54/0), Telephone (0x50/1..4) e GeneralPhoneBook (0x51/0). No carro quem os serve é o processo Connectivity (/opt/conn, fora do disco do IDEmu).
+    # Só têm efeito com PHONE_TYPE=internal_phone na codificação (sem ela o CDevCarBluetooth ignora o MOST e o HMI não assina nada). IDEMU_PHONE_DEVICES=0 não os registra
+    PHONE_DEVICES = ((0x54, 0), (0x50, 1), (0x50, 2), (0x50, 3), (0x50, 4), (0x51, 0))
 
     def register_devices(self, devs):
         keys = [(fb << 8) | inst for fb, inst in devs]
@@ -188,7 +195,8 @@ class MostBridge(object):
         self.send(3, _st.pack('<IHI', client_id, 0, 1) + _st.pack('<H', self.DEVCTRL))
         import os
         sel = os.environ.get('IDEMU_MOST_DEVICES', 'core')
-        devs = self.hmi_devices() if sel == 'all' else self.CORE_DEVICES + (self.NAV_DEVICES if os.environ.get('IDEMU_NAV_DEVICES', '1') != '0' else ()) if sel == 'core' else ()
+        devs = self.hmi_devices() if sel == 'all' else self.CORE_DEVICES + (self.NAV_DEVICES if os.environ.get('IDEMU_NAV_DEVICES', '1') != '0' else ()) + \
+            (self.PHONE_DEVICES if os.environ.get('IDEMU_PHONE_DEVICES', '1') != '0' else ()) if sel == 'core' else ()
         self.register_devices(devs)
 
     RETRY_ACK_S = 30.0       # intervalo mínimo entre acks de Notification de uma propriedade sem valor conhecido
@@ -221,6 +229,8 @@ class MostBridge(object):
                 self.send_most(MostMessage(m.src, m.dst, m.fblock, m.inst, m.func, MostMessage.OP_STATUS, data))
                 self.publish(m.fblock, m.func, data, m.inst)
                 self.car._sent[(m.fblock, m.inst, m.func)] = data
+        elif m.fblock == 0xDA and m.op == MostMessage.OP_GET and self.car is not None and self.car.status_for(m.fblock, m.inst, m.func) is not None:
+            self.send_most(MostMessage(m.src, m.dst, m.fblock, m.inst, m.func, MostMessage.OP_STATUS, self.car.status_for(m.fblock, m.inst, m.func)))   # Get de MapControl (0x222, 0x21E...)
         elif self.counts[k] <= 2:
             self.link.log('ponte25 MOST <- %r' % (m,))
 
@@ -342,12 +352,14 @@ class MostCar(object):
     Propriedades conhecidas (layout lido do código do HMI, tools/hmi_most_map.py; semântica confirmada na tela):
       Kombi (0xE0, instância 0) 0x509 `CBordcomputerAverage`: u16 A | u12 B | u12 velocidade média (0,1 km/h) | u12 D |
           u12 consumo médio (0,1 l/100 km) | u8 unidade (1 = métrico) | u8 unidade  ->  tile "Meu Veículo" da tela inicial.
+      Kombi 0x504/0x512 autonomia e 0x510/0x511 início, tempo e distância da viagem (ver _kombi_status).
     """
     KOMBI = (0xE0, 0)
     VEHICLE = (0x05, 0)
     POWER = (0xD1, 2)              # SystemFunctionPowerMode
     NAV = (0x52, 0)                # Navigation
     NAVINFO = (0xCD, 3)            # NavigationInfo
+    BLUETOOTH = (0x54, 0)          # Bluetooth (o Connectivity no carro)
 
     def __init__(self, bridge):
         self.bridge = bridge
@@ -358,6 +370,8 @@ class MostCar(object):
         self._map_vals = {}
         self.avg_speed = 0.0
         self.avg_cons = 0.0
+        self.trip_start = None         # início da viagem do computador de bordo (epoch); fixado no primeiro Status com o CAN ligado
+        self.trip_odo = None           # hodômetro (km) nesse instante
         self._stop = False
         self._sent = {}
 
@@ -478,16 +492,60 @@ class MostCar(object):
             return _st.pack('>BI', self._map_scale, 100)
         return self.MAPCTL.get(fkt)
 
+    def range_km(self):
+        """Autonomia (km) = combustível do CAN / consumo médio. Sem média ainda (logo após ligar), usa o consumo instantâneo; piso de 4 l/100 km como o painel (idemu/cluster.py)."""
+        cons = self.avg_cons if self.avg_cons >= 0.1 else self._sig('fuel_consumption', 7.5)
+        return int(max(0.0, self._sig('fuel_level')) / max(4.0, cons or 7.5) * 100.0)
+
+    def _trip(self):
+        """(início epoch, hodômetro no início) da viagem; fixado na primeira consulta com o CAN ligado (cada boot do ambiente é uma viagem nova)."""
+        import time
+        if self.trip_start is None and self.can is not None:
+            self.trip_start, self.trip_odo = time.time(), self._sig('odometer')
+        return self.trip_start, self.trip_odo
+
+    def _kombi_status(self, fkt):
+        """Computador de bordo do Kombi (0xE0/0). Layouts lidos dos tratadores `Status` (vtable[8]) e dos getters chamados por CDevCarOnBoardComputer (0xfea29c)
+        e CDevCarTripComputer (0xfec880, 0xfecac4) no HmiMain3D 2720 (docs/V850.md, "Autonomia e computador de viagem")."""
+        import os, time
+        if '%x' % fkt in os.environ.get('IDEMU_KOMBI_SKIP', '').split(','):        # depuração: deixa esta propriedade no padrão de zeros (IDEMU_KOMBI_SKIP=510,511)
+            return None
+        if fkt == 0x509:      # CBordcomputerAverage: u16 | u16 B | u16 C | u16 D | u16 E (<= 0xFFF) | u8<=3 | u8<=7. B/D = velocidade/consumo médios do computador de bordo,
+                              # C/E = os da viagem (tile "Meu Veículo"), em 0,1 km/h e 0,1 l/100 km
+            spd = max(0, min(4095, int(round(self.avg_speed * 10))))
+            con = max(0, min(4095, int(round(self.avg_cons * 10))))
+            return _st.pack('>HHHHHBB', 0, spd, spd, con, con, 1, 1)
+        if fkt == 0x504:      # CKombiExternalDisplay: u16 | u16<=0xFFF autonomia (km) | u16<=0xFFF | u8<=3. É desta que vem a autonomia mostrada no "Computador de bordo"
+                              # (CDevCarOnBoardComputer 0xfea520: <= 0xFA0 válida, 0xFFD inválida); o padrão de zeros mostrava "0 km". O 3º campo (<= 0x1A0) e o u8 (0/1) são lidos
+                              # por outro dispositivo (0xf35608, semântica desconhecida) e continuam 0 como no padrão
+            return _st.pack('>HHHB', 0, max(0, min(0xFA0, self.range_km())), 0, 0)
+        if fkt == 0x512:      # CRangeTankStatus: u16 | u8<=3 | u8 | u8 | u8 | u8<=3 estado | u16<=0xFFF autonomia (km). O HMI só lê os dois últimos: estado 0/1 (2 e 3 descartam o
+                              # Status inteiro) e autonomia (0xFFF = inválida, mantém a anterior). Os bytes 3..5 não são lidos por ninguém; vai o tanque em litros no 3º por completude
+            tank = max(0, min(255, int(round(self._sig('fuel_level')))))
+            return _st.pack('>HBBBBBH', 0, 0, tank, 0, 0, 0, max(0, min(0xFFE, self.range_km())))
+        if fkt in (0x510, 0x511):
+            t0, odo0 = self._trip()
+            if t0 is None:
+                return None
+            if fkt == 0x510:  # CBordcomputerTravelStart: u16 | u16 ano (<= 3000) | u8 dia (<= 31) | u8 hora (<= 23) | u8 minuto (<= 59) | u8 mês (<= 12); fora disso = inválido
+                t = time.localtime(t0)
+                return _st.pack('>HHBBBB', 0, t.tm_year, t.tm_mday, t.tm_hour, t.tm_min, t.tm_mon)
+            # CBordcomputerTravelData: u16 | u16 horas de viagem (< 2400) | u8 minutos (<= 59) | u16 distância (km, <= 0xFFFC) | s16 (não lido)
+            el = max(0, int(time.time() - t0))
+            dist = max(0, min(0xFFFC, int(self._sig('odometer') - odo0)))
+            return _st.pack('>HHBHh', 0, min(2399, el // 3600), el // 60 % 60, dist, 0)
+        return None
+
     def status_for(self, fblock, inst, fkt):
         """Bytes do Status de uma propriedade (ou None se ainda não sabemos montar)."""
         if (fblock, inst) in (self.NAV, self.NAVINFO):
             return self._nav_status(fblock, fkt)
         if (fblock, inst) == (0xDA, 1):
             return self._map_status(fkt)
-        if (fblock, inst) == self.KOMBI and fkt == 0x509:
-            spd = max(0, min(4095, int(round(self.avg_speed * 10))))
-            con = max(0, min(4095, int(round(self.avg_cons * 10))))
-            return _st.pack('>HHHHHBB', 0, spd, spd, con, con, 1, 1)
+        if (fblock, inst) == self.KOMBI and fkt in (0x504, 0x509, 0x510, 0x511, 0x512):
+            data = self._kombi_status(fkt)
+            if data is not None:
+                return data
         if (fblock, inst) == self.VEHICLE:
             # Tamanhos confirmados no HMI (/tmp/sizes.json); a SEMÂNTICA dos bytes ainda não foi confirmada na tela.
             if fkt == 0x621:                       # CCarSpeed2: u16 em 0,01 km/h (hipótese)
@@ -520,6 +578,11 @@ class MostCar(object):
             # PMD_Sleepmode_Alloff (log "CDevCarPowerMode::onPxyPowerState ... PM_alloff") e os estados de menu que exigem terminal ligado ficam cinzas.
             on = int(self._sig('terminal_state', 69)) != 0
             return bytes((3 if on else 0,)) if fkt == 0x430 else bytes((0x63 if on else 0,))
+        if (fblock, inst) == self.BLUETOOTH:
+            # Layouts dos decodificadores (vtable[6] de CPxyBluetooth::C…): 0x200 CBluetoothEnable = u8 bool (log "Bluetooth enabled"); 0xC0B CBTServiceUnavailable e
+            # 0xC0D CBluetoothServiceActivationState = 2 x u8 (log "All available" / "New bits: 0x0000"). Com isso aparecem "Últimas chamadas" e "Discar número" em
+            # Comunicação e abrem as telas de telefone e de pareamento. Não há rádio Bluetooth: nenhum telefone conecta de verdade.
+            return {0x200: b'\x01', 0xC0B: b'\x00\x00', 0xC0D: b'\x00\x00'}.get(fkt)
         d = self._defaults().get('%02x:%d:%03x' % (fblock, inst, fkt))
         return bytes.fromhex(d) if d else None
 

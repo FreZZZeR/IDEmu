@@ -158,11 +158,7 @@ class App:
         self.save_env(env)
         # recodificar: refaz só o shim (rápido) se o ambiente já foi compilado (só o iDrive 5/6 tem shim; os outros aplicam a codificação na próxima partida)
         if not env.get('kind') and self.build_info(eid)['state'] == 'ready' and ('coding' in d or 'chassis' in d):
-            try:
-                tmp = os.path.join(self.env_dir(eid), 'work'); os.makedirs(tmp, exist_ok=True)
-                os_dir = os.path.join(tmp, 'os'); self._extract_cfg(env, os_dir)
-                builder.build_shim(env, os_dir, os.path.join(self.env_dir(eid), 'images', 'shim.img'))
-                shutil.rmtree(tmp, ignore_errors=True)
+            try: self._rebuild_shim(eid, env)
             except Exception as e:
                 raise ApiError('falha ao regravar a codificação: %s' % e, 500)
         return self.load_env(eid)
@@ -234,6 +230,26 @@ class App:
             if os.path.isdir(s): shutil.copytree(s, t)
             elif os.path.isfile(s): shutil.copy(s, t)
         return self.load_env(nid)
+    # ---- shim (iDrive 5/6) ----
+    SHIM_INPUTS = (os.path.join('shim', 'lib'), os.path.join('guest', 'boot.sh'), os.path.join('guest', 'agent.sh'))
+    def _rebuild_shim(self, eid, env):
+        tmp = os.path.join(self.env_dir(eid), 'work'); os.makedirs(tmp, exist_ok=True)
+        try:
+            os_dir = os.path.join(tmp, 'os'); self._extract_cfg(env, os_dir)
+            builder.build_shim(env, os_dir, os.path.join(self.env_dir(eid), 'images', 'shim.img'))
+        finally: shutil.rmtree(tmp, ignore_errors=True)
+    def _shim_stale(self, eid):
+        """O shim.img do ambiente é mais velho que as bibliotecas do guest ou os scripts de boot (uma atualização do IDEmu): precisa ser refeito para valer."""
+        try: built = os.path.getmtime(os.path.join(self.env_dir(eid), 'images', 'shim.img'))
+        except OSError: return False
+        here = os.path.dirname(os.path.abspath(__file__))
+        for rel in self.SHIM_INPUTS:
+            p = os.path.join(here, rel)
+            for f in ([os.path.join(p, n) for n in os.listdir(p)] if os.path.isdir(p) else [p]):
+                try:
+                    if os.path.getmtime(f) > built: return True
+                except OSError: pass
+        return False
     # ---- execução ----
     def start(self, eid, cold=False):
         if self.rt and self.rt.state in ('booting', 'running'): raise ApiError('já existe um ambiente em execução; pare-o primeiro')
@@ -244,6 +260,9 @@ class App:
             try: self.rt.stop()
             except Exception: traceback.print_exc()
         k = env.get('kind')
+        if not k and self._shim_stale(eid):              # IDEmu atualizado: refaz o shim (correções do guest, como a entrada do rotor) antes de subir
+            try: self._rebuild_shim(eid, env); print('shim de %s refeito (bibliotecas do guest mais novas)' % eid)
+            except Exception as e: print('aviso: shim de %s não foi refeito (%s); usando o anterior' % (eid, e))
         self.rt = cic.CicRuntime(self.env_dir(eid), env) if k == 'cic' else mgu.MguRuntime(self.env_dir(eid), env) if k == 'mgu22' else mgu7.Mgu7Runtime(self.env_dir(eid), env) if k == 'mgu7' else runtime.Runtime(self.env_dir(eid), env)
         self.last_id = eid
         try: self.rt.start(cold=cold)

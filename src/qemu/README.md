@@ -9,3 +9,13 @@ Dois arquivos do QEMU 11.1.2 que o IDEmu modifica/acrescenta; `tools/qemu/build.
   SD (`mmcblk0: error -123`). O acréscimo grava só o `PCIDevice`.
 
 Sem este binário o iDrive 7 ainda sobe com o QEMU do Homebrew, mas pela serial (≈ 100x mais lenta) e sem boot rápido.
+
+## iDrive 5/6: segundo núcleo do OMAP5 (experimental)
+
+`omap5-uevm.c` liga o CPU1 como a ROM do OMAP5: o startup do QNX grava `AUX_CORE_BOOT_0/1` (0x48281800/0x804) e dá `sev`; o vCPU, que começa desligado, sobe no
+endereço gravado e recebe o VBAR dos vetores do `stub.bin` (sem isso o primeiro `smc` do núcleo secundário caía no vetor 0x4 e ele ficava preso em aborts).
+Com `IDEMU_SMP=2` (e um `qemu-system-arm` compilado com este arquivo, apontado por `IDEMU_QEMU_ARM`) o QNX sobe com os dois núcleos (`procnto-smp`, MTTCG) e o
+`boot.sh` prende o HMI no CPU0 (`on -R 1`). Estado em 2026-11-09: serviços e shell sobem; o HMI ainda sai com 138 (watchdog do SvcDSI) num Mac carregado, então
+o padrão continua 1 núcleo. Com o
+Mac sem carga (2026-11-09, f30-bmw, boot completo): os serviços chegam antes (3,6 s contra 5,0 s), mas o HMI, preso no CPU0, é o gargalo e o boot até a tela levou 55,6 s
+(1 núcleo: 27–37 s) com uma saída 138 no meio; o rotor responde igual (0,086 s). Sem `on -R 1` o HMI sai com 138/139 em laço. Compilação: a árvore do QEMU 11.1.2 com `qemu-v11.1.2-idemu.patch` + este arquivo, `--target-list=arm-softmmu`.

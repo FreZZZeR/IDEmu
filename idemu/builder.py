@@ -296,8 +296,22 @@ def build_shim(env, os_istep, out, log=print):
         '# variáveis do carro virtual (geradas pelo IDEmu)',
         'export HMI_BRAND=%s' % {'bmw': '00', 'mini': '02', 'rr': '03', 'mcv': '01'}.get(env.get('brand', 'bmw'), '00'),
         'export IDEMU_CHASSIS=%s IDEMU_VIN=%s' % (env.get('chassis', ''), cd.get('vin', '')),
+        # -h do HmiMain3D (boot.sh). Na carga do perfil da chave (Vehicle 0x224 CIgnitionKey, 11-15 s no thread principal) o "SvcDSI watchdog" matava o HMI
+        # (saída 138) quando passava de ~13 s, o que acontece com o telefone codificado (PHONE_TYPE). Com 40000 a sonda é criada com 480 s em vez de 120 s e o HMI sobrevive.
+        'export IDEMU_HMI_HEARTBEAT=%d' % int(os.environ.get('IDEMU_HMI_HEARTBEAT') or 40000),
     ]) + '\n'
     eb = envsh.encode(); t.add('/env.sh', 0o100755, eb, len(eb))
+    # plugins de teste: idemu/plugins/<Nome>/* vira /plug/<Nome>/* (boot.sh liga como .../data/ro/Plugins)
+    pdir = os.path.join(HERE, 'plugins')
+    if os.path.isdir(pdir):
+        t.mkdir('/plug', 0o40775)
+        for pn in sorted(os.listdir(pdir)):
+            pp = os.path.join(pdir, pn)
+            if not os.path.isdir(pp): continue
+            t.mkdir('/plug/' + pn, 0o40775)
+            for f in sorted(os.listdir(pp)):
+                fp = os.path.join(pp, f)
+                t.add('/plug/%s/%s' % (pn, f), 0o100755 if f.endswith('.so') else 0o100644, fp, os.path.getsize(fp))
     bs = open(os.path.join(HERE, 'guest', 'boot.sh'), 'rb').read()
     t.add('/boot.sh', 0o100755, bs, len(bs))
     ag = open(os.path.join(HERE, 'guest', 'agent.sh'), 'rb').read()

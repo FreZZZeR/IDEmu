@@ -18,6 +18,9 @@
 #include "qemu/units.h"
 #include "qom/object.h"
 #include "target/arm/cpu-qom.h"
+#include "target/arm/cpu.h"
+#include "target/arm/arm-powerctl.h"
+#include "hw/core/cpu.h"
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -97,6 +100,46 @@ static uint64_t omap5_regs_read(void *opaque, hwaddr off, unsigned size)
     return (w >> ((off & 3) * 8)) & ((size == 4) ? 0xffffffffu : ((1u << (size * 8)) - 1));
 }
 
+/*
+ * Segundo núcleo (-smp 2): o startup do QNX (board_smp_start) grava em AUX_CORE_BOOT_0 o bit 4+cpu, em AUX_CORE_BOOT_1 o endereço de entrada
+ * e dá SEV. A ROM do OMAP5 então solta o núcleo nesse endereço com a MMU desligada; aqui o vCPU começa desligado e é ligado nessa hora.
+ */
+#define OMAP5_AUX_CORE_BOOT0 0x48281800ULL
+#define OMAP5_AUX_CORE_BOOT1 0x48281804ULL
+/* vetores do stub.bin do IDEmu (o guest roda sem EL3: o `smc` da inicialização vira UNDEF e o stub o responde com r0 = 0). O stub só ajusta o VBAR
+   do CPU0; o núcleo secundário precisa do mesmo, senão o primeiro `smc` cai no vetor 0x4 (sem memória) e ele fica preso em aborts. */
+#define OMAP5_STUB_VBAR 0xbff00100ULL
+
+static void omap5_secondary_vbar(CPUState *cs, run_on_cpu_data d)
+{
+    CPUARMState *env = &ARM_CPU(cs)->env;
+    env->cp15.vbar_ns = d.host_ulong;
+    env->cp15.vbar_s = d.host_ulong;
+}
+
+static void omap5_aux_core_boot(Omap5Regs *r)
+{
+    uint32_t mask = omap5_get32(r, OMAP5_AUX_CORE_BOOT0 - OMAP5_L4_BASE);
+    uint32_t entry = omap5_get32(r, OMAP5_AUX_CORE_BOOT1 - OMAP5_L4_BASE);
+    int n;
+
+    if (!entry) {
+        return;
+    }
+    for (n = 1; n < 4; n++) {
+        CPUState *cs = qemu_get_cpu(n);
+        if (cs && (mask & (0x10u << n)) && ARM_CPU(cs)->power_state == PSCI_OFF) {
+            int ret = arm_set_cpu_on(arm_cpu_mp_affinity(ARM_CPU(cs)), entry, 0, 1, false);
+            if (ret == QEMU_ARM_POWERCTL_RET_SUCCESS) {     /* roda depois do reset que o arm_set_cpu_on enfileirou */
+                async_run_on_cpu(cs, omap5_secondary_vbar, RUN_ON_CPU_HOST_ULONG(OMAP5_STUB_VBAR));
+            }
+            if (r->trace || ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
+                fprintf(stderr, "OMAP5: cpu%d on @0x%08x -> %d\n", n, entry, ret);
+            }
+        }
+    }
+}
+
 static void omap5_regs_write(void *opaque, hwaddr off, uint64_t val,
                              unsigned size)
 {
@@ -106,6 +149,9 @@ static void omap5_regs_write(void *opaque, hwaddr off, uint64_t val,
                 OMAP5_L4_BASE + off, val);
     }
     memcpy(r->store + off, &val, size);
+    if (OMAP5_L4_BASE + off == OMAP5_AUX_CORE_BOOT1 && val) {
+        omap5_aux_core_boot(r);
+    }
 }
 
 static const MemoryRegionOps omap5_regs_ops = {
@@ -223,6 +269,9 @@ static void omap5_uevm_init(MachineState *machine)
         Object *cpuobj = object_new(machine->cpu_type);
         object_property_set_int(cpuobj, "reset-cbar", OMAP5_PERIPHBASE,
                                 &error_abort);
+        if (n > 0) {        /* núcleos secundários esperam o AUX_CORE_BOOT (ver omap5_aux_core_boot) */
+            object_property_set_bool(cpuobj, "start-powered-off", true, &error_abort);
+        }
         qdev_realize(DEVICE(cpuobj), NULL, &error_fatal);
     }
 

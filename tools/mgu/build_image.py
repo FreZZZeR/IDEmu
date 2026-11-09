@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Monta o iDrive 8 (MGU22) a partir da PSdZData, sem alterá-la. Saída em <projeto>/mgu22 (cerca de 2,5 GB).
+Uso: build_image.py [psdzdata] [--car g70bev]  (o carro precisa bater com SERIES em MGU22_Coding.txt)"""
+import gzip, json, os, shutil, stat, struct, subprocess, sys, tarfile, tempfile
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+OUT = os.path.join(ROOT, 'mgu22')
+VER, VERK = '007_034_003', '007_034_003'
+sys.path.insert(0, HERE)
+from ext4ls import E4
+
+def simg(src, dst):
+    subprocess.check_call([sys.executable, os.path.join(HERE, 'simg2raw.py'), src, dst])
+
+def member(tarpath, name, dst):
+    with tarfile.open(tarpath) as t:
+        src = t.extractfile(name)
+        with open(dst, 'wb') as o: shutil.copyfileobj(src, o, 1 << 20)
+
+def ext2cpio(img, cpio, src='/', pfx=''):
+    subprocess.check_call([sys.executable, os.path.join(HERE, 'ext2cpio.py'), img, cpio, src, pfx])
+
+def main():
+    psdz = next((a for a in sys.argv[1:] if not a.startswith('--')), None)
+    if not psdz:
+        psdz = json.load(open(os.path.join(ROOT, 'settings.json')))['psdz_path']
+    swfl, swfk = os.path.join(psdz, 'swe/swfl'), os.path.join(psdz, 'swe/swfk')
+    tmp = tempfile.mkdtemp(prefix='mgu22', dir=os.path.dirname(OUT)); os.makedirs(OUT, exist_ok=True)
+    try:
+        print('kernel e raiz'); f = os.path.join(swfl, f'swfl_00009ff7.bin.{VER}')
+        member(f, 'sa81x5-boot.img.bin.gz', tmp + '/boot.gz')
+        b = gzip.open(tmp + '/boot.gz').read()
+        assert b[:8] == b'ANDROID!'
+        ks, ps = struct.unpack_from('<I', b, 8)[0], struct.unpack_from('<I', b, 36)[0]
+        open(OUT + '/Image', 'wb').write(b[ps:ps + ks]); del b
+        member(f, 'mgu22-bmw-image-mgu22-sa8155.ext4.simg.bin.gz', tmp + '/root.gz')
+        simg(tmp + '/root.gz', tmp + '/root.raw'); os.unlink(tmp + '/root.gz')
+        print('IVI e EXT')
+        member(os.path.join(swfl, f'swfl_00009fc6.bin.{VER}'), 'mgu22-ivi-sa8155.ext4.simg.bin.gz', tmp + '/ivi.gz')
+        simg(tmp + '/ivi.gz', tmp + '/ivi.raw'); os.unlink(tmp + '/ivi.gz')
+        member(os.path.join(swfl, f'swfl_00009ff9.bin.{VER}'), 'mgu22-ext-sa8155.ext4.simg.bin.gz', tmp + '/ext.gz')
+        simg(tmp + '/ext.gz', tmp + '/ext.raw'); os.unlink(tmp + '/ext.gz')
+        # raiz do link das bibliotecas do guest e tabela de codificação
+        sysroot = OUT + '/sysroot'; os.makedirs(sysroot + '/lib', exist_ok=True); os.makedirs(sysroot + '/usr/lib', exist_ok=True)
+        r = E4(tmp + '/root.raw')
+        def grab(e, p, dst):
+            t = e.inode(e.lookup(p))
+            while stat.S_ISLNK(e.mode(t)):
+                p = os.path.join(os.path.dirname(p), e.data(t).decode()); t = e.inode(e.lookup(p))
+            open(dst, 'wb').write(e.data(t))
+        grab(r, '/lib/libc.so.6', sysroot + '/lib/libc.so.6')
+        for n in ('libwayland-client.so.0', 'libwayland-server.so.0', 'libivi-application.so.1', 'libivi-controller.so.1', 'libdbus-1.so.3'):
+            grab(r, '/usr/lib/' + n, sysroot + '/usr/lib/' + n)
+        grab(r, '/usr/share/sysfunc/coding/cafd_mgu_02_a.bin', tmp + '/cafd.bin')
+        iv = E4(tmp + '/ivi.raw')
+        grab(iv, '/rootfs/usr/share/hmi/data/ro/MGU22_Coding.txt', tmp + '/coding.txt')
+        gdir = OUT + '/guest'; os.makedirs(gdir, exist_ok=True)
+        subprocess.check_call(['zsh', os.path.join(ROOT, 'src/mgu22/build.sh'), sysroot, gdir])
+        subprocess.check_call([sys.executable, os.path.join(HERE, 'gencoding.py'), tmp + '/cafd.bin', tmp + '/coding.txt', gdir + '/coding.tab'])
+        import gen_coding8; gen_coding8.write(gen_coding8.build(tmp + '/cafd.bin', tmp + '/coding.txt'), OUT + '/coding8.json')
+        print('cpio')
+        ext2cpio(tmp + '/root.raw', tmp + '/root.cpio')
+        ext2cpio(tmp + '/ivi.raw', tmp + '/ivi.cpio', '/rootfs', '/opt/ivi/rootfs')
+        ext2cpio(tmp + '/ext.raw', tmp + '/ext.cpio', '/rootfs', '/opt/ext/rootfs')
+        for n in ('root', 'ivi', 'ext'): os.unlink(f'{tmp}/{n}.raw')
+        print('dados da marca e do carro (SWFK)')
+        pk = [('a6b1', 'hmi-data.bmw', 'var/begu/hmi-data/bmw'), ('a6b0', 'hmi-data.bmw-shared', 'var/begu/hmi-data/bmw-shared'),
+              ('a6a6', 'hmi-vehicles.g70bev', 'var/begu/hmi-vehicles/G70BEV')]
+        cps = []
+        for a, b_, dst in pk:
+            n = f'swfk-0000{a}.{b_}.ext4.bin.gz'
+            member(os.path.join(swfk, f'swfk_0000{a}.bin.{VERK}'), n, tmp + '/p.gz')
+            with gzip.open(tmp + '/p.gz') as g, open(tmp + '/p.raw', 'wb') as o: shutil.copyfileobj(g, o, 1 << 20)
+            c = f'{tmp}/{a}.cpio'; ext2cpio(tmp + '/p.raw', c, '/', dst); cps.append(c)
+            os.unlink(tmp + '/p.gz'); os.unlink(tmp + '/p.raw')
+        print('juntando')
+        # sem compressão: run.py copia isto direto para a RAM do guest e o kernel só desempacota
+        with open(OUT + '/base.cpio', 'wb') as o:
+            for c in [tmp + '/root.cpio', tmp + '/ivi.cpio', tmp + '/ext.cpio'] + cps:
+                with open(c, 'rb') as f: shutil.copyfileobj(f, o, 1 << 20)
+                os.unlink(c)
+        print('pronto:', OUT)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+if __name__ == '__main__':
+    main()

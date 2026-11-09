@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="color-scheme" content="dark light">
+<title>iDrive no celular</title>
+<style>
+  :root { --bg:#0b0d10; --card:#161a20; --line:#262c35; --fg:#eef1f5; --mut:#97a1ae; --acc:#ff6a2b; --ok:#3ecf8e; --bad:#ff5d5d; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f2f4f7; --card:#fff; --line:#d9dee5; --fg:#161a20; --mut:#5d6773; } }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  body { padding:max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); max-width:760px; margin:0 auto; }
+  h1 { font-size:17px; margin:4px 0 10px; display:flex; align-items:center; gap:8px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--mut); display:inline-block; }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; }
+  .screen { position:relative; background:#000; border-radius:10px; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; }
+  .screen img { display:block; width:100%; height:auto; pointer-events:none; -webkit-user-drag:none; }
+  .screen .ph { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#889; text-align:center; padding:16px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  button { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-height:44px; touch-action:manipulation; }
+  button:active, button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .btns button { flex:1 1 30%; font-size:13px; letter-spacing:.04em; }
+  .pad { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; max-width:260px; margin:8px auto 0; }
+  .pad button { min-height:52px; font-size:20px; }
+  .wheel { width:min(64vw, 240px); aspect-ratio:1; border-radius:50%; margin:10px auto 2px; border:2px solid var(--line); background:radial-gradient(circle at 50% 40%, var(--card), var(--bg)); position:relative; touch-action:none; user-select:none; -webkit-user-select:none; }
+  .wheel i { position:absolute; left:50%; top:8%; width:6px; height:18%; margin-left:-3px; background:var(--acc); border-radius:3px; transform-origin:50% 270%; }
+  .wheel b { position:absolute; inset:30%; border-radius:50%; border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-weight:600; color:var(--mut); }
+  .sw { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .sw small, .mut { color:var(--mut); font-size:13px; }
+  input[type=checkbox] { width:46px; height:28px; accent-color:var(--acc); }
+  #pin { display:none; } #pin input { width:100%; font-size:28px; letter-spacing:.3em; text-align:center; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  .err { color:var(--bad); min-height:1.3em; margin:6px 0 0; }
+  .hidden, [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div id="pin" class="card">
+  <h1 data-t="title"></h1>
+  <p class="mut" data-t="pinhelp"></p>
+  <input id="pinin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" aria-label="PIN">
+  <p id="pinerr" class="err" role="alert"></p>
+  <button id="pinok" style="width:100%" data-t="enter"></button>
+</div>
+
+<div id="app" class="hidden">
+  <h1><span id="dot" class="dot"></span><span data-t="title"></span><span id="st" class="mut" style="margin-left:auto;font-weight:400"></span></h1>
+
+  <div class="card">
+    <div class="screen" id="screen"><img id="scr" alt="" hidden><div class="ph" id="ph"></div></div>
+    <p class="mut" id="touchhint" style="margin:8px 2px 0"></p>
+  </div>
+
+  <div class="card">
+    <div class="wheel" id="wheel"><i id="needle"></i><b data-t="rotor"></b></div>
+    <div class="row" style="justify-content:center">
+      <button id="rl" aria-label="◀">◀</button><button id="push" data-t="push"></button><button id="rr" aria-label="▶">▶</button>
+    </div>
+    <div class="pad">
+      <span></span><button data-tilt="up" aria-label="↑">↑</button><span></span>
+      <button data-tilt="left" aria-label="←">←</button><span></span><button data-tilt="right" aria-label="→">→</button>
+      <span></span><button data-tilt="down" aria-label="↓">↓</button><span></span>
+    </div>
+    <div class="row btns">
+      <button data-key="1">MENU</button><button data-key="2">BACK</button><button data-key="3">OPTION</button>
+      <button data-key="4">CD</button><button data-key="5">RADIO</button><button data-key="6">TEL</button><button data-key="7">NAV</button>
+    </div>
+  </div>
+
+  <div class="card" id="gpscard">
+    <div class="sw"><div><b data-t="gps"></b><br><small data-t="gpshelp"></small></div><input type="checkbox" id="gpson" aria-label="GPS"></div>
+    <p class="mut" id="gpsmsg" style="margin:8px 0 0"></p>
+  </div>
+</div>
+
+<script>
+'use strict';
+const NEEDPIN = /*AUTH*/false;
+const L = (navigator.language || 'en').toLowerCase().startsWith('pt') ? 'pt' : 'en';
+const T = {
+  title: ['iDrive no celular', 'iDrive on your phone'],
+  pinhelp: ['Digite o PIN que aparece no IDEmu, no Mac.', 'Enter the PIN shown in IDEmu on the Mac.'],
+  enter: ['Entrar', 'Enter'], rotor: ['rotor', 'rotor'], push: ['PUSH', 'PUSH'], gps: ['Usar minha localização como GPS do carro', 'Use my location as the car GPS'],
+  gpshelp: ['O iDrive passa a andar por onde você anda.', 'The head unit follows wherever you go.'],
+  off: ['Head unit desligada. Inicie o ambiente no Mac.', 'Head unit is off. Start the environment on the Mac.'],
+  boot: ['Iniciando…', 'Starting…'], run: ['em execução', 'running'], bad: ['PIN incorreto', 'Wrong PIN'], lock: ['Muitas tentativas: espere um minuto', 'Too many attempts: wait a minute'],
+  touch: ['Toque na imagem para tocar na tela do carro; arraste para rolar.', 'Tap the image to touch the car screen; drag to scroll.'],
+  notouch: ['Esta head unit não recebe toque: use o rotor e os botões.', 'This head unit has no touch input: use the rotor and buttons.'],
+  insecure: ['Sem HTTPS o navegador bloqueia a localização. Abra o endereço https:// que o IDEmu mostra e aceite o aviso do certificado.', 'Without HTTPS the browser blocks location. Open the https:// address IDEmu shows and accept the certificate warning.'],
+  denied: ['Permissão de localização negada no navegador.', 'Location permission denied in the browser.'],
+  sending: ['Enviando: {lat}, {lon} · {kmh} km/h', 'Sending: {lat}, {lon} · {kmh} km/h'],
+  nogps: ['O GPS virtual não está disponível nesta head unit.', 'The virtual GPS is not available on this head unit.'],
+  lost: ['Sem conexão com o Mac…', 'Lost connection to the Mac…'],
+};
+const tr = (k, v) => (T[k][L === 'pt' ? 0 : 1]).replace(/\{(\w+)\}/g, (_, n) => v[n]);
+document.documentElement.lang = L === 'pt' ? 'pt-BR' : 'en';
+document.querySelectorAll('[data-t]').forEach((e) => { e.textContent = tr(e.dataset.t); });
+const $ = (id) => document.getElementById(id);
+const post = (path, body) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'same-origin' });
+
+/* ---- PIN ---- */
+if (NEEDPIN) {
+  $('pin').style.display = 'block';
+  const go = async () => {
+    const r = await post('/login', { pin: $('pinin').value });
+    if (r.ok) location.replace('/'); else $('pinerr').textContent = tr(r.status === 429 ? 'lock' : 'bad');
+  };
+  $('pinok').onclick = go; $('pinin').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  $('pinin').focus();
+} else {
+  $('app').classList.remove('hidden'); start();
+}
+
+function start() {
+  let info = { state: 'stopped', w: 1440, h: 540, touch: false }, seq = -1, url = null, up = true;
+  const input = (b) => post('/p/input', b).catch(() => {});
+
+  /* ---- tela ao vivo (long polling de PNG) ---- */
+  async function frames() {
+    for (;;) {
+      try {
+        const r = await fetch('/p/screen.png?since=' + seq, { credentials: 'same-origin', cache: 'no-store' });
+        if (r.status === 401) { location.replace('/'); return; }
+        if (r.status === 200) {
+          seq = +r.headers.get('X-Frame-Seq'); const u = URL.createObjectURL(await r.blob());
+          $('scr').src = u; $('scr').hidden = false; $('ph').hidden = true; if (url) URL.revokeObjectURL(url); url = u;
+        } else if (r.status !== 204) { await new Promise((s) => setTimeout(s, 1000)); }
+        up = true;
+      } catch (e) { up = false; await new Promise((s) => setTimeout(s, 1500)); }
+    }
+  }
+  async function poll() {
+    for (;;) {
+      try {
+        const r = await fetch('/p/state', { credentials: 'same-origin', cache: 'no-store' });
+        if (r.status === 401) { location.replace('/'); return; }
+        info = await r.json(); up = true;
+      } catch (e) { up = false; }
+      const running = info.state === 'running';
+      $('dot').className = 'dot ' + (up && running ? 'ok' : up ? '' : 'bad');
+      $('st').textContent = !up ? tr('lost') : running ? tr('run') : info.state === 'booting' ? tr('boot') : '';
+      if (!running && $('scr').hidden) $('ph').textContent = tr(info.state === 'booting' ? 'boot' : 'off');
+      $('touchhint').textContent = tr(info.touch ? 'touch' : 'notouch');
+      await new Promise((s) => setTimeout(s, 2000));
+    }
+  }
+  $('ph').textContent = tr('off'); frames(); poll();
+
+  /* ---- toque na tela ---- */
+  const scr = $('screen'); let down = false, lastMove = 0;
+  const norm = (e) => { const r = $('scr').getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+  scr.addEventListener('pointerdown', (e) => { if (!info.touch || $('scr').hidden) return; down = true; scr.setPointerCapture(e.pointerId); e.preventDefault(); input(Object.assign({ t: 'touch', down: true }, norm(e))); });
+  scr.addEventListener('pointermove', (e) => { if (!down) return; const n = performance.now(); if (n - lastMove < 40) return; lastMove = n; input(Object.assign({ t: 'touch', down: true, move: true }, norm(e))); });
+  const end = (e) => { if (!down) return; down = false; input(Object.assign({ t: 'touch', down: false }, norm(e))); };
+  scr.addEventListener('pointerup', end); scr.addEventListener('pointercancel', end);
+
+  /* ---- rotor (arrastar em círculo), setas, botões ---- */
+  let acc = 0, ang0 = null, needle = 0;
+  const wheel = $('wheel');
+  const turn = (d) => { needle += d * 18; $('needle').style.transform = 'rotate(' + needle + 'deg)'; input({ t: 'rotor', delta: d }); };
+  const angle = (e) => { const r = wheel.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI; };
+  wheel.addEventListener('pointerdown', (e) => { ang0 = angle(e); acc = 0; wheel.setPointerCapture(e.pointerId); e.preventDefault(); });
+  wheel.addEventListener('pointermove', (e) => {
+    if (ang0 === null) return; const a = angle(e); let d = a - ang0; if (d > 180) d -= 360; if (d < -180) d += 360; ang0 = a; acc += d;
+    while (acc >= 18) { acc -= 18; turn(1); } while (acc <= -18) { acc += 18; turn(-1); }
+  });
+  const wend = () => { ang0 = null; }; wheel.addEventListener('pointerup', wend); wheel.addEventListener('pointercancel', wend);
+  $('rl').onclick = () => turn(-1); $('rr').onclick = () => turn(1);
+  const hold = (el, code) => {
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('on'); input({ t: 'key', code, val: 1 }); });
+    const rel = () => { if (el.classList.contains('on')) { el.classList.remove('on'); input({ t: 'key', code, val: 0 }); } };
+    el.addEventListener('pointerup', rel); el.addEventListener('pointercancel', rel);
+  };
+  hold($('push'), 8); document.querySelectorAll('[data-key]').forEach((b) => hold(b, +b.dataset.key));
+  document.querySelectorAll('[data-tilt]').forEach((b) => { b.onclick = () => input({ t: 'tilt', dir: b.dataset.tilt }); });
+
+  /* ---- GPS do celular ---- */
+  let watch = null, lastSent = 0;
+  const msg = (s) => { $('gpsmsg').textContent = s; };
+  $('gpson').addEventListener('change', () => {
+    if (!$('gpson').checked) { if (watch !== null) navigator.geolocation.clearWatch(watch); watch = null; msg(''); return; }
+    if (!navigator.geolocation || !window.isSecureContext) { $('gpson').checked = false; msg(tr('insecure')); return; }
+    watch = navigator.geolocation.watchPosition(async (p) => {
+      const now = Date.now(); if (now - lastSent < 900) return; lastSent = now;
+      const c = p.coords, body = { lat: c.latitude, lon: c.longitude, speed: c.speed, heading: c.heading, alt: c.altitude, accuracy: c.accuracy };
+      try {
+        const r = await post('/p/gps', body);
+        msg(r.ok ? tr('sending', { lat: c.latitude.toFixed(5), lon: c.longitude.toFixed(5), kmh: Math.round((c.speed || 0) * 3.6) }) : tr('nogps'));
+      } catch (e) { msg(tr('lost')); }
+    }, (err) => { $('gpson').checked = false; msg(err.code === 1 ? tr('denied') : String(err.message)); }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+  });
+}
+</script>
+</body>
+</html>

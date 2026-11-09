@@ -1,0 +1,162 @@
+/* IDEmu – temas. "Cupertino" é o visual padrão (apple.css). Os outros dois redefinem as variáveis e refinam componentes.
+   O tema fica em <html data-theme="nbt|bavarian">; sem o atributo vale o Cupertino. */
+
+/* ================================================================ Next Big Thing (iDrive 6 e anteriores)
+   Assets reais do iDrive 6 (themes/nbt_*.png: janela cromada, brilho laranja de seleção, caixas de marcação, botões de rádio,
+   ícones circulares) e das imagens de abertura da BMW (nbt_trails/nbt_blue/nbt_horizon). Preto brilhante, laranja-vermelho e azul aqua. */
+html[data-theme="nbt"] {
+  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif; --display: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --r: 10px; --r-sm: 8px; --r-surface: 12px; --aqua: #38c8ff;
+  --bg: #020305; --bg2: #06090d; --bg-sidebar: #05070a; --bg-raised: #121820; --side: #05070a;
+  --panel: rgba(8, 12, 17, .86); --panel2: rgba(8, 12, 17, .86); --panel3: rgba(120, 190, 255, .10);
+  --glass: rgba(6, 9, 13, .9); --glass-strong: rgba(4, 6, 9, .97); --glass-brd: rgba(200, 220, 240, .34); --spec: rgba(255, 255, 255, .22);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, .20) 0%, rgba(255, 255, 255, .04) 48%, rgba(255, 255, 255, 0) 50%);
+  --line: rgba(190, 215, 240, .18); --line2: rgba(190, 215, 240, .32); --line3: rgba(190, 215, 240, .5); --hover: rgba(255, 106, 26, .13);
+  --field: #080c11; --sunken: rgba(0, 0, 0, .55);
+  --text: #f4f7fa; --text2: #d2dbe4; --muted: #94a4b4; --faint: #66778a;
+  --accent: #ff6a1a; --accent2: #ff9d5c; --accent-bg: rgba(255, 106, 26, .24); --accent-ring: rgba(255, 140, 70, .6);
+  --wall: none;
+}
+html[data-theme="nbt"] body { letter-spacing: 0; background: url(themes/nbt_trails.jpg) left bottom / 55% auto no-repeat, url(themes/nbt_blue.jpg) center bottom / 100% 55% no-repeat, #020305; background-blend-mode: screen, screen, normal; background-attachment: fixed; }
+html[data-theme="nbt"] .sidebar, html[data-theme="nbt"] .card, html[data-theme="nbt"] .modal, html[data-theme="nbt"] .toast { backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-theme="nbt"] .sidebar { background: linear-gradient(180deg, rgba(255, 255, 255, .14) 0, rgba(255, 255, 255, .03) 90px, transparent 91px), linear-gradient(90deg, #000, #070b10); border-right: 1px solid rgba(210, 225, 240, .45); box-shadow: 6px 0 22px rgba(0, 0, 0, .7), inset -1px 0 0 rgba(0, 0, 0, .8); }
+/* janelas: o quadro cromado do iDrive 6 (flying_window) como moldura em nove partes */
+html[data-theme="nbt"] .card, html[data-theme="nbt"] .modal { border: 16px solid transparent; border-image: url(themes/nbt_window.png) 44 fill / 16px stretch; background: none; box-shadow: none; border-radius: 0; }
+html[data-theme="nbt"] .card-title { background: linear-gradient(180deg, rgba(255, 255, 255, .22) 0, rgba(255, 255, 255, .05) 50%, rgba(255, 255, 255, 0) 51%); border-bottom: 1px solid rgba(255, 106, 26, .55); text-transform: uppercase; letter-spacing: .1em; font-size: 11.5px; color: var(--text); margin: -2px -2px 0; }
+html[data-theme="nbt"] h1 { font-weight: 300; letter-spacing: .02em; text-shadow: 0 0 18px rgba(56, 200, 255, .35); }
+html[data-theme="nbt"] h2 { font-weight: 400; }
+html[data-theme="nbt"] .page-head { padding-bottom: 12px; border-bottom: 2px solid; border-image: linear-gradient(90deg, #ff6a1a, rgba(255, 106, 26, .25) 45%, transparent) 1; }
+html[data-theme="nbt"] .nav-sec { text-transform: uppercase; letter-spacing: .14em; font-size: 10px; color: var(--aqua); }
+html[data-theme="nbt"] .nav a { border-radius: 10px; border: 10px solid transparent; margin: -7px 0; padding: 0 2px; color: var(--text2); }
+html[data-theme="nbt"] .nav a .nv-ic { border-radius: 50%; width: 26px; height: 26px; background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, .22), rgba(255, 255, 255, .04) 60%), #000; border: 1.5px solid rgba(255, 255, 255, .9); box-shadow: 0 0 8px rgba(56, 200, 255, .35); color: #fff; }
+html[data-theme="nbt"] .nav a:hover { background: none; color: #fff; }
+html[data-theme="nbt"] .nav a.active { border-image: url(themes/nbt_hl.png) 40 fill / 10px stretch; background: none; box-shadow: none; color: #fff; }
+html[data-theme="nbt"] .nav a.active .nv-ic { border-color: var(--accent2); box-shadow: 0 0 10px rgba(255, 106, 26, .8); }
+html[data-theme="nbt"] .btn { border-radius: 9px; border: 1px solid rgba(200, 225, 245, .55); color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .6);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .34) 0%, rgba(255, 255, 255, .08) 49%, rgba(0, 0, 0, .28) 51%, rgba(255, 255, 255, .05) 100%), linear-gradient(180deg, #4b6a86, #101a24); box-shadow: 0 1px 0 rgba(255, 255, 255, .15) inset, 0 2px 6px rgba(0, 0, 0, .6); }
+html[data-theme="nbt"] .btn:hover:not(:disabled) { filter: brightness(1.2); border-color: var(--aqua); box-shadow: 0 0 12px rgba(56, 200, 255, .45), 0 1px 0 rgba(255, 255, 255, .15) inset; }
+html[data-theme="nbt"] .btn.primary { border-color: #ffb27a;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .45) 0%, rgba(255, 255, 255, .1) 49%, rgba(0, 0, 0, .2) 51%, rgba(255, 255, 255, .06) 100%), linear-gradient(180deg, #ff8a3c, #c43a00); box-shadow: 0 0 14px rgba(255, 106, 26, .5), 0 1px 0 rgba(255, 255, 255, .25) inset; }
+html[data-theme="nbt"] .btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 255, 255, .5) 0%, rgba(255, 255, 255, .12) 49%, rgba(0, 0, 0, .18) 51%, rgba(255, 255, 255, .08) 100%), linear-gradient(180deg, #ffa05c, #e04a00); border-color: #ffd2b0; }
+html[data-theme="nbt"] .btn.danger-o, html[data-theme="nbt"] .btn.danger { background: linear-gradient(180deg, rgba(255, 255, 255, .3) 0%, rgba(255, 255, 255, .06) 49%, rgba(0, 0, 0, .25) 51%, transparent 100%), linear-gradient(180deg, #a02020, #3a0707); border-color: #ff7a7a; color: #fff; }
+html[data-theme="nbt"] .input, html[data-theme="nbt"] input[type=text], html[data-theme="nbt"] input[type=search], html[data-theme="nbt"] select, html[data-theme="nbt"] textarea { background: linear-gradient(180deg, #000, #0a0f15); border: 1px solid rgba(200, 225, 245, .4); border-radius: 6px; box-shadow: inset 0 2px 5px rgba(0, 0, 0, .8); }
+html[data-theme="nbt"] input:focus, html[data-theme="nbt"] select:focus, html[data-theme="nbt"] textarea:focus { border-color: var(--accent2); box-shadow: 0 0 0 2px var(--accent-ring), inset 0 2px 5px rgba(0, 0, 0, .8); }
+html[data-theme="nbt"] input[type=checkbox], html[data-theme="nbt"] input[type=radio] { appearance: none; -webkit-appearance: none; width: 22px; height: 22px; background: center / contain no-repeat; }
+html[data-theme="nbt"] input[type=checkbox] { background-image: url(themes/nbt_check_off.png); } html[data-theme="nbt"] input[type=checkbox]:checked { background-image: url(themes/nbt_check_on.png); }
+html[data-theme="nbt"] input[type=radio] { background-image: url(themes/nbt_radio_off.png); } html[data-theme="nbt"] input[type=radio]:checked { background-image: url(themes/nbt_radio_on.png); }
+html[data-theme="nbt"] .bar { height: 10px; border-radius: 6px; border: 1px solid rgba(200, 225, 245, .45); background: #000; box-shadow: inset 0 2px 4px rgba(0, 0, 0, .9); }
+html[data-theme="nbt"] .bar > i { border-radius: 5px; background: linear-gradient(180deg, rgba(255, 255, 255, .55) 0, rgba(255, 255, 255, .1) 50%, rgba(0, 0, 0, .2) 52%, transparent), linear-gradient(90deg, #ff4a00, #ff9a3c); box-shadow: 0 0 10px rgba(255, 106, 26, .7); }
+html[data-theme="nbt"] .seg-lang { border-radius: 8px; border: 1px solid var(--line2); } html[data-theme="nbt"] .seg-lang button.on { background: linear-gradient(180deg, #ff8a3c, #c43a00); color: #fff; box-shadow: none; }
+html[data-theme="nbt"] .bmw-bezel { border-radius: 8px; box-shadow: 0 0 0 1px rgba(210, 225, 240, .45), 0 0 22px rgba(56, 200, 255, .2), 0 14px 34px rgba(0, 0, 0, .7); }
+html[data-theme="nbt"] .backdrop { background: rgba(0, 0, 0, .72); backdrop-filter: none; }
+html[data-theme="nbt"] ::selection { background: rgba(255, 106, 26, .6); }
+
+/* ================================================================ Bavarian OS (iDrive 8 e posteriores)
+   Preto puro, raios vermelhos convergentes e brilho azul (themes/bav_beams.svg), tipografia leve em maiúsculas, botões chanfrados
+   e seleção em vermelho com linha branca, como nas telas reais do iDrive 8. */
+html[data-theme="bavarian"] {
+  --sans: "BMW Type Next", "Helvetica Neue", "SF Pro Text", system-ui, sans-serif; --display: "BMW Type Next", "Helvetica Neue", "SF Pro Display", system-ui, sans-serif;
+  --r: 4px; --r-sm: 3px; --r-surface: 4px; --red: #e2132b;
+  --bg: #000; --bg2: #07080a; --bg-sidebar: #030304; --bg-raised: #121317; --side: #030304;
+  --panel: rgba(12, 13, 16, .8); --panel2: rgba(12, 13, 16, .8); --panel3: rgba(255, 255, 255, .06);
+  --glass: rgba(10, 11, 14, .82); --glass-strong: rgba(4, 5, 7, .97); --glass-brd: rgba(255, 255, 255, .13); --spec: rgba(255, 255, 255, .1);
+  --sheen: none;
+  --line: rgba(255, 255, 255, .1); --line2: rgba(255, 255, 255, .2); --line3: rgba(255, 255, 255, .34); --hover: rgba(255, 255, 255, .07);
+  --field: #0c0d10; --sunken: rgba(0, 0, 0, .6);
+  --text: #fff; --text2: #dcdee3; --muted: #9a9ea8; --faint: #666a74;
+  --accent: #1c69d4; --accent2: #6aa6f7; --accent-bg: rgba(28, 105, 212, .28); --accent-ring: rgba(106, 166, 247, .6);
+  --danger: #ff4d5e; --danger-bg: rgba(226, 19, 43, .2); --danger-t: #ff8591;
+  --wall: none;
+}
+html[data-theme="bavarian"] body { letter-spacing: .01em; font-weight: 300; background: url(themes/bav_beams.svg) center bottom / 100% 62% no-repeat, #000; background-attachment: fixed; }
+html[data-theme="bavarian"] h1 { font-weight: 300; font-size: 30px; text-transform: uppercase; letter-spacing: .08em; }
+html[data-theme="bavarian"] h2 { font-weight: 300; text-transform: uppercase; letter-spacing: .06em; font-size: 17px; }
+html[data-theme="bavarian"] b, html[data-theme="bavarian"] strong { font-weight: 500; }
+html[data-theme="bavarian"] .page-head { padding-bottom: 12px; border-bottom: 1px solid; border-image: linear-gradient(90deg, #fff, rgba(255, 255, 255, .55) 40%, rgba(255, 255, 255, .05)) 1; }
+html[data-theme="bavarian"] .sidebar { background: linear-gradient(180deg, rgba(3, 3, 4, .96), rgba(3, 3, 4, .85)); border-right: 0; box-shadow: 1px 0 0 rgba(255, 255, 255, .08); }
+html[data-theme="bavarian"] .card, html[data-theme="bavarian"] .modal { border: 1px solid rgba(255, 255, 255, .14); border-radius: 0; background: linear-gradient(180deg, rgba(24, 26, 33, .78), rgba(5, 6, 8, .88)); box-shadow: 0 18px 40px -18px #000;
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px)); }
+html[data-theme="bavarian"] .modal { clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 28px 100%, 0 calc(100% - 28px)); }
+html[data-theme="bavarian"] .card-title { font-weight: 300; letter-spacing: .12em; text-transform: uppercase; font-size: 11.5px; color: var(--text2); border-bottom: 1px solid; border-image: linear-gradient(90deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, .06)) 1; }
+html[data-theme="bavarian"] .nav-sec { text-transform: uppercase; letter-spacing: .16em; font-size: 10px; color: var(--faint); font-weight: 400; }
+html[data-theme="bavarian"] .nav a { border-radius: 0; font-weight: 300; letter-spacing: .04em; }
+html[data-theme="bavarian"] .nav a .nv-ic { border-radius: 50%; background: transparent; border: 1.5px solid rgba(255, 255, 255, .8); box-shadow: none; color: #fff; }
+html[data-theme="bavarian"] .nav a.active { background: linear-gradient(90deg, rgba(226, 19, 43, .62), rgba(226, 19, 43, .06) 92%); box-shadow: inset 0 -2px 0 var(--red), 0 8px 20px -10px rgba(226, 19, 43, .9); font-weight: 400; }
+html[data-theme="bavarian"] .nav a.active .nv-ic { border-color: #fff; background: rgba(226, 19, 43, .5); }
+html[data-theme="bavarian"] .btn { border: 0; border-radius: 0; height: 36px; padding: 0 20px; background: linear-gradient(180deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .04)); box-shadow: inset 0 -2px 0 rgba(106, 166, 247, .75);
+  clip-path: polygon(11px 0, calc(100% - 11px) 0, 100% 50%, calc(100% - 11px) 100%, 11px 100%, 0 50%); font-weight: 400; letter-spacing: .03em; }
+html[data-theme="bavarian"] .btn.sm { padding: 0 16px; height: 30px; } html[data-theme="bavarian"] .btn.icon { width: 36px; padding: 0; }
+html[data-theme="bavarian"] .btn:hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .08)); box-shadow: inset 0 -2px 0 #fff; }
+html[data-theme="bavarian"] .btn.primary { background: linear-gradient(180deg, #2c7de8, #1558b8); box-shadow: inset 0 -2px 0 var(--red); }
+html[data-theme="bavarian"] .btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #4a93f5, #1c69d4); box-shadow: inset 0 -2px 0 #ff5566; }
+html[data-theme="bavarian"] .btn.danger-o, html[data-theme="bavarian"] .btn.danger { background: linear-gradient(180deg, rgba(226, 19, 43, .5), rgba(226, 19, 43, .15)); box-shadow: inset 0 -2px 0 var(--red); color: #fff; }
+html[data-theme="bavarian"] .input, html[data-theme="bavarian"] input[type=text], html[data-theme="bavarian"] input[type=search], html[data-theme="bavarian"] select, html[data-theme="bavarian"] textarea { background: #07080a; border: 0; border-bottom: 1px solid rgba(255, 255, 255, .45); border-radius: 0; }
+html[data-theme="bavarian"] input:focus, html[data-theme="bavarian"] select:focus, html[data-theme="bavarian"] textarea:focus { border-bottom-color: var(--red); box-shadow: 0 2px 0 var(--red); outline: none; }
+html[data-theme="bavarian"] input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 38px; height: 22px; border-radius: 11px; background: #1c1e23; border: 1px solid rgba(255, 255, 255, .5); position: relative; transition: background .2s; }
+html[data-theme="bavarian"] input[type=checkbox]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .2s; }
+html[data-theme="bavarian"] input[type=checkbox]:checked { background: #1fb457; border-color: #5fe08c; } html[data-theme="bavarian"] input[type=checkbox]:checked::after { transform: translateX(16px); }
+html[data-theme="bavarian"] input[type=radio] { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .7); background: transparent; }
+html[data-theme="bavarian"] input[type=radio]:checked { border-color: var(--red); background: radial-gradient(circle, #fff 0 34%, transparent 38%); box-shadow: 0 0 8px var(--red); }
+html[data-theme="bavarian"] .bar { height: 4px; border-radius: 0; background: rgba(255, 255, 255, .14); }
+html[data-theme="bavarian"] .bar > i { border-radius: 0; background: linear-gradient(90deg, #1c69d4, #fff 70%, var(--red)); box-shadow: 0 0 10px rgba(226, 19, 43, .8); }
+html[data-theme="bavarian"] .seg-lang { border-radius: 0; } html[data-theme="bavarian"] .seg-lang button { border-radius: 0; } html[data-theme="bavarian"] .seg-lang button.on { box-shadow: inset 0 -2px 0 var(--red); }
+html[data-theme="bavarian"] .bmw-bezel { border-radius: 6px; }
+html[data-theme="bavarian"] .backdrop { background: rgba(0, 0, 0, .7); }
+html[data-theme="bavarian"] ::selection { background: rgba(226, 19, 43, .6); }
+
+/* ================================================================ seletor de tema (pop-up e botão) */
+.theme-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .theme-pick { grid-template-columns: 1fr; } }
+.theme-opt { display: flex; flex-direction: column; gap: 10px; text-align: left; padding: 10px; border-radius: 16px; border: 1.5px solid var(--line2); background: var(--panel3); color: var(--text); font: inherit; cursor: pointer; transition: border-color .15s, transform .15s, background .15s; }
+.theme-opt:hover { transform: translateY(-2px); border-color: var(--line3); }
+.theme-opt.on { border-color: var(--accent2); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--accent-bg); }
+.theme-opt b { font-size: 14px; display: block; } .theme-opt span.d { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.tp-prev { height: 108px; border-radius: 10px; overflow: hidden; display: grid; grid-template-columns: 34% 1fr; gap: 0; border: 1px solid rgba(255, 255, 255, .12); }
+.tp-side { padding: 9px 7px; display: flex; flex-direction: column; gap: 5px; } .tp-main { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.tp-side i { display: block; height: 11px; } .tp-main i { display: block; height: 22px; } .tp-main i.s { height: 9px; width: 60%; }
+.tp-cup { background: #1e1e20; } .tp-cup .tp-side { background: #2a2a2d; } .tp-cup .tp-side i { border-radius: 4px; background: rgba(255, 255, 255, .14); } .tp-cup .tp-side i:first-child { background: rgba(10, 132, 255, .6); }
+.tp-cup .tp-main i { border-radius: 9px; background: rgba(255, 255, 255, .09); } .tp-cup .tp-main i.s { background: rgba(255, 255, 255, .22); }
+.tp-nbt { background: url(themes/nbt_trails.jpg) left bottom / 90% auto no-repeat, url(themes/nbt_blue.jpg) center bottom / 100% 60% no-repeat, #000; background-blend-mode: screen, screen, normal; }
+.tp-nbt .tp-side { background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 40%), #05070a; border-right: 1px solid rgba(210, 225, 240, .5); }
+.tp-nbt .tp-side i { background: transparent; border: 1px solid rgba(255, 255, 255, .25); border-radius: 6px; }
+.tp-nbt .tp-side i:first-child { background: linear-gradient(180deg, rgba(255, 150, 80, .8), rgba(255, 70, 0, .35)); border-color: #ffb27a; box-shadow: 0 0 8px rgba(255, 106, 26, .8); }
+.tp-nbt .tp-main i { background: linear-gradient(180deg, rgba(255, 255, 255, .22) 0, rgba(255, 255, 255, .03) 50%, rgba(0, 0, 0, .3) 52%), #0b1219; border: 1px solid rgba(210, 225, 240, .5); border-radius: 7px; }
+.tp-nbt .tp-main i.s { background: linear-gradient(90deg, #ff4a00, #ff9a3c); border: 0; height: 7px; border-radius: 4px; box-shadow: 0 0 8px rgba(255, 106, 26, .8); }
+.tp-bav { background: url(themes/bav_beams.svg) center bottom / 100% 100% no-repeat, #000; }
+.tp-bav .tp-side { background: rgba(0, 0, 0, .8); } .tp-bav .tp-side i { background: transparent; border-bottom: 1px solid rgba(255, 255, 255, .25); height: 10px; }
+.tp-bav .tp-side i:first-child { background: linear-gradient(90deg, rgba(226, 19, 43, .85), rgba(226, 19, 43, .1)); border-bottom: 2px solid #e2132b; }
+.tp-bav .tp-main i { background: rgba(255, 255, 255, .06); border-bottom: 1px solid rgba(255, 255, 255, .5); border-radius: 0; clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 9px 100%, 0 50%); }
+.tp-bav .tp-main i.s { background: linear-gradient(90deg, #1c69d4, #fff, #e2132b); height: 3px; clip-path: none; border: 0; width: 70%; }
+
+/* ================================================================ configurações iniciais, seletor de idioma e tour */
+.lang-sel { width: 100%; height: 30px; border-radius: 8px; background: var(--field); color: var(--text); border: 1px solid var(--line2); padding: 0 8px; font: 500 12.5px var(--sans); cursor: pointer; }
+.side-links { flex-wrap: wrap; row-gap: 2px; }
+.ob h3 { font-size: 15px; margin: 6px 0 2px; } .ob-lead { color: var(--text2); font-size: 14px; margin-bottom: 10px; }
+.lang-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 12px 0 4px; }
+@media (max-width: 760px) { .lang-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.lang-opt { height: 48px; border-radius: 12px; border: 1.5px solid var(--line2); background: var(--panel3); color: var(--text); font: 500 14px var(--sans); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.lang-opt:hover { transform: translateY(-1px); border-color: var(--line3); } .lang-opt.on { border-color: var(--accent2); background: var(--accent-bg); box-shadow: 0 0 0 3px var(--accent-ring); }
+.ob-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.ob-end { display: flex; gap: 8px; } .ob-dots { display: flex; gap: 7px; } .ob-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line3); } .ob-dots i.on { background: var(--accent2); box-shadow: 0 0 8px var(--accent-ring); } .ob-dots i.past { background: var(--accent); opacity: .6; }
+.ob-done { text-align: center; padding: 18px 0 4px; } .ob-done h3 { font-size: 20px; margin-top: 10px; }
+.ob-badge { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto; display: grid; place-items: center; background: var(--accent-bg); border: 2px solid var(--accent2); color: var(--accent2); box-shadow: 0 0 22px var(--accent-ring); }
+.tour-mask { position: fixed; inset: 0; z-index: 90; }
+.tour-spot { position: fixed; z-index: 91; border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .66), 0 0 0 2px var(--accent2), 0 0 22px var(--accent-ring); transition: left .28s var(--ease), top .28s var(--ease), width .28s var(--ease), height .28s var(--ease); }
+.tour-pop { position: fixed; z-index: 92; width: min(340px, calc(100vw - 24px)); padding: 16px 18px; border-radius: 16px; background: var(--glass-strong); border: 1px solid var(--line3); box-shadow: var(--shadow-lg); transition: left .28s var(--ease), top .28s var(--ease); }
+.tour-pop b { font: 650 15px var(--display); display: block; margin-bottom: 6px; } .tour-pop p { color: var(--text2); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.tour-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .tour-btns { display: flex; gap: 6px; }
+
+/* ---- arquivos do sistema (packages.js) ---- */
+.fs-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; margin-bottom: 14px; border-radius: 11px; background: var(--sunken, rgba(127,127,127,.14)); }
+.fs-tab { flex: 1; min-width: 110px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: 600 12.5px var(--sans); cursor: pointer; }
+.fs-tab:hover { color: var(--text); } .fs-tab.on { background: var(--accent); color: #fff; }
+.pkg-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.pkg-panel .need-banner { flex-wrap: wrap; } .pkg-panel .need .vers { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+.pkg-panel .need-list { max-height: 46vh; overflow-y: auto; padding-right: 4px; }
+.pkg-panel .need .fname { user-select: all; }
+
+/* ---- janela do Electron: barra de título integrada ---- */
+html.desktop .sidebar { padding-top: 44px; }
+html.desktop .sidebar::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 36px; -webkit-app-region: drag; z-index: 5; pointer-events: none; }
+html.desktop body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 36px; -webkit-app-region: drag; z-index: 1; pointer-events: none; }
+html.desktop button, html.desktop input, html.desktop select, html.desktop a { -webkit-app-region: no-drag; }

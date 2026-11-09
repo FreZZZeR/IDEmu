@@ -1,0 +1,577 @@
+{
+ "version": 1,
+ "scenarios": [
+  {
+   "id": "parado_motor_desligado",
+   "name": "Parado, motor desligado",
+   "desc": "Carro estacionado, terminal R (acessórios), motor desligado, freio de mão puxado.",
+   "duration": 10,
+   "loop": true,
+   "drivetrain": false,
+   "tracks": {
+    "terminal_state": [
+     [
+      0,
+      65
+     ]
+    ],
+    "engine_rpm": [
+     [
+      0,
+      0
+     ]
+    ],
+    "vehicle_speed": [
+     [
+      0,
+      0
+     ]
+    ],
+    "accelerator_pos": [
+     [
+      0,
+      0
+     ]
+    ],
+    "gear_position": [
+     [
+      0,
+      0
+     ]
+    ],
+    "parking_brake": [
+     [
+      0,
+      1
+     ]
+    ],
+    "headlight_low": [
+     [
+      0,
+      0
+     ]
+    ],
+    "fuel_consumption": [
+     [
+      0,
+      0
+     ]
+    ]
+   }
+  },
+  {
+   "id": "partida",
+   "name": "Partida do motor",
+   "desc": "Terminal 30 -> R -> 15 -> 50 (arranque) -> motor em marcha lenta.",
+   "duration": 14,
+   "loop": false,
+   "drivetrain": false,
+   "tracks": {
+    "terminal_state": [
+     [
+      0,
+      0
+     ],
+     [
+      1,
+      65
+     ],
+     [
+      2.5,
+      69
+     ],
+     [
+      4,
+      85
+     ],
+     [
+      6.2,
+      69
+     ]
+    ],
+    "engine_rpm": [
+     [
+      0,
+      0
+     ],
+     [
+      4,
+      0
+     ],
+     [
+      4.2,
+      250
+     ],
+     [
+      6,
+      250
+     ],
+     [
+      6.5,
+      1100
+     ],
+     [
+      8,
+      900
+     ],
+     [
+      12,
+      800
+     ]
+    ],
+    "coolant_temp": [
+     [
+      0,
+      20
+     ],
+     [
+      14,
+      24
+     ]
+    ],
+    "vehicle_speed": [
+     [
+      0,
+      0
+     ]
+    ],
+    "gear_position": [
+     [
+      0,
+      0
+     ]
+    ],
+    "parking_brake": [
+     [
+      0,
+      1
+     ],
+     [
+      10,
+      0
+     ]
+    ],
+    "key_present": [
+     [
+      0,
+      1
+     ]
+    ],
+    "fuel_consumption": [
+     [
+      0,
+      0
+     ],
+     [
+      8,
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "id": "cidade",
+   "name": "Cidade",
+   "desc": "Trânsito urbano: acelera, freia, para em semáforos, setas (50 km/h máx.).",
+   "duration": 120,
+   "loop": true,
+   "drivetrain": true,
+   "tracks": {
+    "terminal_state": [
+     [
+      0,
+      69
+     ]
+    ],
+    "gear_position": [
+     [
+      0,
+      3
+     ]
+    ],
+    "parking_brake": [
+     [
+      0,
+      0
+     ]
+    ],
+    "headlight_low": [
+     [
+      0,
+      1
+     ]
+    ],
+    "vehicle_speed": [
+     [
+      0,
+      0
+     ],
+     [
+      5,
+      0
+     ],
+     [
+      15,
+      40
+     ],
+     [
+      25,
+      50
+     ],
+     [
+      32,
+      45
+     ],
+     [
+      40,
+      0
+     ],
+     [
+      48,
+      0
+     ],
+     [
+      58,
+      35
+     ],
+     [
+      70,
+      55
+     ],
+     [
+      80,
+      30
+     ],
+     [
+      90,
+      0
+     ],
+     [
+      98,
+      0
+     ],
+     [
+      110,
+      40
+     ],
+     [
+      119,
+      8
+     ],
+     [
+      120,
+      0
+     ]
+    ],
+    "steering_angle": [
+     [
+      0,
+      0
+     ],
+     [
+      33,
+      0
+     ],
+     [
+      36,
+      250
+     ],
+     [
+      40,
+      0
+     ],
+     [
+      70,
+      0
+     ],
+     [
+      73,
+      -300
+     ],
+     [
+      78,
+      0
+     ],
+     [
+      120,
+      0
+     ]
+    ]
+   },
+   "blink": [
+    {
+     "signal": "turn_left",
+     "from": 30,
+     "to": 36,
+     "period": 0.7
+    },
+    {
+     "signal": "turn_right",
+     "from": 68,
+     "to": 74,
+     "period": 0.7
+    },
+    {
+     "signal": "turn_right",
+     "from": 100,
+     "to": 106,
+     "period": 0.7
+    }
+   ]
+  },
+  {
+   "id": "rodovia",
+   "name": "Rodovia",
+   "desc": "Cruzeiro entre 110 e 120 km/h com ultrapassagens (setas).",
+   "duration": 90,
+   "loop": true,
+   "drivetrain": true,
+   "tracks": {
+    "terminal_state": [
+     [
+      0,
+      69
+     ]
+    ],
+    "gear_position": [
+     [
+      0,
+      3
+     ]
+    ],
+    "parking_brake": [
+     [
+      0,
+      0
+     ]
+    ],
+    "headlight_low": [
+     [
+      0,
+      1
+     ]
+    ],
+    "vehicle_speed": [
+     [
+      0,
+      110
+     ],
+     [
+      20,
+      118
+     ],
+     [
+      40,
+      112
+     ],
+     [
+      60,
+      120
+     ],
+     [
+      80,
+      114
+     ],
+     [
+      90,
+      110
+     ]
+    ],
+    "steering_angle": [
+     [
+      0,
+      0
+     ],
+     [
+      30,
+      0
+     ],
+     [
+      31.5,
+      20
+     ],
+     [
+      33,
+      0
+     ],
+     [
+      35,
+      0
+     ],
+     [
+      36.5,
+      -20
+     ],
+     [
+      38,
+      0
+     ],
+     [
+      90,
+      0
+     ]
+    ]
+   },
+   "blink": [
+    {
+     "signal": "turn_left",
+     "from": 28,
+     "to": 34,
+     "period": 0.7
+    },
+    {
+     "signal": "turn_right",
+     "from": 35,
+     "to": 40,
+     "period": 0.7
+    }
+   ]
+  },
+  {
+   "id": "estacionando",
+   "name": "Estacionando",
+   "desc": "Marcha à ré em baixa velocidade (<5 km/h) com esterçamento, depois P.",
+   "duration": 40,
+   "loop": true,
+   "drivetrain": true,
+   "tracks": {
+    "terminal_state": [
+     [
+      0,
+      69
+     ]
+    ],
+    "parking_brake": [
+     [
+      0,
+      0
+     ],
+     [
+      37,
+      1
+     ]
+    ],
+    "headlight_low": [
+     [
+      0,
+      1
+     ]
+    ],
+    "gear_position": [
+     [
+      0,
+      2
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      30,
+      3
+     ],
+     [
+      33,
+      2
+     ],
+     [
+      35,
+      0
+     ]
+    ],
+    "vehicle_speed": [
+     [
+      0,
+      0
+     ],
+     [
+      2,
+      0
+     ],
+     [
+      5,
+      3
+     ],
+     [
+      10,
+      4
+     ],
+     [
+      15,
+      2
+     ],
+     [
+      18,
+      0
+     ],
+     [
+      20,
+      0
+     ],
+     [
+      22,
+      3
+     ],
+     [
+      26,
+      4
+     ],
+     [
+      29,
+      0
+     ],
+     [
+      30,
+      0
+     ],
+     [
+      31,
+      3
+     ],
+     [
+      33,
+      0
+     ],
+     [
+      40,
+      0
+     ]
+    ],
+    "steering_angle": [
+     [
+      0,
+      0
+     ],
+     [
+      5,
+      -360
+     ],
+     [
+      15,
+      -540
+     ],
+     [
+      25,
+      200
+     ],
+     [
+      32,
+      0
+     ],
+     [
+      40,
+      0
+     ]
+    ]
+   },
+   "blink": [
+    {
+     "signal": "turn_right",
+     "from": 0,
+     "to": 5,
+     "period": 0.7
+    }
+   ]
+  }
+ ]
+}

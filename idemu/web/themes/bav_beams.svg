@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 500" preserveAspectRatio="none">
+<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#e2132b" stop-opacity="0"/><stop offset=".55" stop-color="#e2132b" stop-opacity=".9"/><stop offset="1" stop-color="#ff5a6a" stop-opacity="1"/></linearGradient>
+<linearGradient id="h" x1="1" x2="0"><stop offset="0" stop-color="#e2132b" stop-opacity="0"/><stop offset=".55" stop-color="#e2132b" stop-opacity=".9"/><stop offset="1" stop-color="#ff5a6a"/></linearGradient>
+<radialGradient id="b" cx=".5" cy="1" r=".6"><stop offset="0" stop-color="#2d8cff" stop-opacity=".85"/><stop offset=".5" stop-color="#1c69d4" stop-opacity=".35"/><stop offset="1" stop-color="#1c69d4" stop-opacity="0"/></radialGradient></defs>
+<rect width="1600" height="500" fill="url(#b)"/>
+<g stroke-width="2.2" fill="none">
+<g stroke="url(#g)"><path d="M0 40L800 400"/><path d="M0 95L800 410"/><path d="M0 150L800 420"/><path d="M0 205L800 430"/><path d="M0 260L800 440"/><path d="M0 315L800 450"/></g>
+<g stroke="url(#h)"><path d="M1600 40L800 400"/><path d="M1600 95L800 410"/><path d="M1600 150L800 420"/><path d="M1600 205L800 430"/><path d="M1600 260L800 440"/><path d="M1600 315L800 450"/></g></g></svg>

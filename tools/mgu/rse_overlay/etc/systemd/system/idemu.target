@@ -1,0 +1,3 @@
+[Unit]
+Description=IDEmu minimal MGU target
+Wants=systemd-journald.service dlt.service vsomeipd.service persod.service codingshm.service nodestatemanager-daemon.service nodestartupcontroller.service hmi_rse_left.service idemu-diag.service

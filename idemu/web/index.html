@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>IDEmu – iDrive emulator</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="apple.css">
+<link rel="stylesheet" href="themes.css">
+<script>if(window.idemuNative)document.documentElement.classList.add("desktop");</script>
+<script>try{var t=JSON.parse(localStorage.getItem("idemu.theme"));if(t==="nbt"||t==="bavarian")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar" aria-label="IDEmu">
+  <a class="brand" href="#/ambientes" aria-label="IDEmu – home">
+    <svg class="logo" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true">
+      <defs><linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5ab0ff"/><stop offset="1" stop-color="#0a64d6"/></linearGradient></defs>
+      <rect x="1" y="1" width="30" height="30" rx="8" fill="url(#lg1)"/>
+      <circle cx="16" cy="16" r="9" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6"/>
+      <circle cx="16" cy="16" r="4" fill="#fff"/>
+      <circle cx="16" cy="7.4" r="1.6" fill="#fff"/>
+    </svg>
+    <span class="brand-t"><span class="bn">IDEmu</span><small>iDrive · NBT Evo</small></span>
+  </a>
+  <div class="nav-sec" data-i18n>Emulator</div>
+  <nav class="nav" id="nav" aria-label="Main">
+    <a href="#/ambientes" data-route="ambientes"><span class="nv-ic" data-ic="layers"></span><span data-i18n>Environments</span></a>
+    <a href="#/execucao" data-route="execucao" id="nav-run" hidden><span class="nv-ic" data-ic="car" ></span><span data-i18n>Head unit</span> <small id="nav-run-name"></small><span class="live-dot"></span></a>
+  </nav>
+  <div class="nav-sec" data-i18n>Tools</div>
+  <nav class="nav" aria-label="Tools">
+    <a href="#/estatisticas" data-route="estatisticas"><span class="nv-ic" data-ic="activity" ></span><span data-i18n>Advanced statistics</span></a>
+    <a href="#/coding" data-route="coding" id="nav-coding" hidden><span class="nv-ic" data-ic="gear" ></span><span data-i18n>Coding</span></a>
+  </nav>
+  <div class="side-foot">
+    <div class="side-links"><button type="button" class="link-btn" id="files-folder" data-i18n>Files folder…</button><button type="button" class="link-btn" id="theme-btn" data-i18n>Theme…</button><button type="button" class="link-btn" id="tour-btn" data-i18n>Tour…</button>
+      <div class="conn" id="conn" role="status" title="Connected to the IDEmu server"><span class="dot"></span><span id="conn-text" data-i18n>Connected</span></div></div>
+    <select class="lang-sel" id="ui-lang" aria-label="Interface language"></select>
+  </div>
+</aside>
+<main id="view" tabindex="-1"></main>
+</div>
+<div id="toasts" aria-live="polite"></div>
+<div id="modal-root"></div>
+<noscript><p style="padding:24px;color:#ddd">IDEmu needs JavaScript enabled.</p></noscript>
+<script src="i18n.js"></script>
+<script src="lang/es.js"></script>
+<script src="lang/fr.js"></script>
+<script src="lang/de.js"></script>
+<script src="lang/it.js"></script>
+<script src="lang/tr.js"></script>
+<script src="lang/ru.js"></script>
+<script src="lang/zh.js"></script>
+<script src="lang/ja.js"></script>
+<script src="util.js"></script>
+<script src="themes.js"></script>
+<script src="onboarding.js"></script>
+<script src="wizard.js"></script>
+<script src="packages.js"></script>
+<script src="tabs.js"></script>
+<script src="cluster.js"></script>
+<script src="run.js"></script>
+<script src="coding.js"></script>
+<script src="stats.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

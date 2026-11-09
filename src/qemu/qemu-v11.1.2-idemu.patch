@@ -1,0 +1,27 @@
+diff --git a/hw/arm/Kconfig b/hw/arm/Kconfig
+index 6f5b2ad..907bb52 100644
+--- a/hw/arm/Kconfig
++++ b/hw/arm/Kconfig
+@@ -727,3 +727,10 @@ config ARMSSE
+     select UNIMP
+     select SSE_COUNTER
+     select SSE_TIMER
++
++config OMAP5_UEVM
++    bool
++    default y
++    depends on TCG && ARM
++    select A15MPCORE
++    select SERIAL_MM
+diff --git a/hw/arm/meson.build b/hw/arm/meson.build
+index 4233a80..79cb342 100644
+--- a/hw/arm/meson.build
++++ b/hw/arm/meson.build
+@@ -108,6 +108,7 @@ arm_common_ss.add(when: 'CONFIG_RASPI', if_true: files('bcm2838_peripherals.c'))
+ arm_common_ss.add(when: 'CONFIG_STRONGARM', if_true: files('strongarm.c'))
+ arm_common_ss.add(when: 'CONFIG_SX1', if_true: files('omap_sx1.c'))
+ arm_common_ss.add(when: 'CONFIG_VERSATILE', if_true: files('versatilepb.c'))
++arm_common_ss.add(when: 'CONFIG_OMAP5_UEVM', if_true: files('omap5-uevm.c'))
+ arm_common_ss.add(when: 'CONFIG_VEXPRESS', if_true: files('vexpress.c'))
+ 
+ arm_common_ss.add(files('boot.c'))

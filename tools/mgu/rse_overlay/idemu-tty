@@ -1,0 +1,8 @@
+#!/bin/sh
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+mount -t proc proc /proc; mount -t devtmpfs dev /dev 2>/dev/null
+stty -F /dev/ttyS1 raw -echo 115200 2>&1
+echo "== tty test start $(cut -d' ' -f1 /proc/uptime)"
+dd if=/dev/zero of=/dev/ttyS1 bs=4096 count=512 2>&1
+echo "== tty test end $(cut -d' ' -f1 /proc/uptime)"
+exec /bin/sh

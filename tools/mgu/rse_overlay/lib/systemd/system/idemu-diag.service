@@ -1,0 +1,7 @@
+[Unit]
+Description=idemu diag
+[Service]
+ExecStart=/usr/bin/idemu-diag.sh
+StandardOutput=journal+console
+[Install]
+WantedBy=multi-user.target

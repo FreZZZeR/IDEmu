@@ -1,0 +1,23 @@
+IDEmu
+Required Notice: Copyright 2026 IDEmu contributors
+
+Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE), except where a file says otherwise.
+
+Third-party and separately licensed parts
+-----------------------------------------
+* src/qemu/ contains new files and a patch for QEMU 11.1.2 (omap5-uevm board, idemu-shm device, SH7785 board, SDHCI PCI fix). QEMU is
+  GNU GPL v2 (or later); these files are derived works and are distributed under GPL-2.0-or-later, as their headers say. A QEMU binary built
+  with them (tools/qemu/build.sh) is also GPL: if you pass it on, you must offer the corresponding source.
+* The renderers use ANGLE/OpenGL on the host and the system libraries of macOS; nothing of them is included here.
+
+Not included, not affiliated
+----------------------------
+* IDEmu is an independent research and development tool. It is not affiliated with, endorsed by or sponsored by BMW AG, Harman, Qualcomm,
+  Intel or any other company named in the documentation. BMW, MINI, iDrive and other names are trademarks of their owners and are used only
+  to say which systems the emulator is meant to run.
+* This repository contains no BMW software, firmware, system images, map data or decompiled code. IDEmu reads the files (PSdZData/SWFL packages)
+  that you have the right to use, builds its own images locally and never modifies the originals.
+* Some data tables in idemu/data/ (signal maps, coding dictionary, property defaults) are interface descriptions written down while analysing
+  such files; they contain names, ids and numbers, not program code.
+* "Noncommercial" means what the license says: personal study, research, hobby and education are fine; selling the emulator or using it in a
+  commercial product or service is not allowed without a separate license from the licensor.

@@ -1,0 +1,246 @@
+{
+ "packages": {
+  "app": {
+   "007_051_002": {
+    "blocks": [
+     {
+      "address": 655424,
+      "family": "V850",
+      "hwindex": "2-3",
+      "identity": {
+       "appl": "8140_APPL",
+       "bios_control": "BIOSControl V850",
+       "bootloader_ids": [
+        "DV850T05xxxxxV107",
+        "DV850T05xxxxxV108"
+       ],
+       "build": "Jun  8 2017 15:20:16",
+       "builder": "cbuild_ScPF",
+       "components": [
+        {
+         "date": "Nov 25 2013",
+         "name": "BMW UGW2",
+         "version": "V2.1.007"
+        },
+        {
+         "date": "Nov 25 2013",
+         "name": "BMW DiagnosticsRouter",
+         "version": "V2.1.005"
+        }
+       ],
+       "device": "Headunit C1",
+       "gateway_data": "V000-009-051-00337"
+      },
+      "ipc_channels": [
+       "IpcTest",
+       "cfDsi",
+       "cfSp",
+       "IpcEnv",
+       "IpcDGW",
+       "IpcSGW",
+       "IpcWatchDog",
+       "IpcTouch_O5",
+       "IpcTestSend",
+       "cfDsiData",
+       "cfAmpData",
+       "IpcSysSet",
+       "IpcAmpControl",
+       "IpcFANControl",
+       "IpcSGW_O5",
+       "IpcO5WatchDog",
+       "IpcTestO5",
+       "IpcWatchDogJ5Send",
+       "IpcWatchDogO5Send",
+       "IpcSysSetSend",
+       "cfMbxEvent",
+       "cfDrData",
+       "IpcOnOff",
+       "IpcRes03",
+       "IpcRes07",
+       "IpcRes12",
+       "IpcErrMemAppClient",
+       "IpcErrMemApp",
+       "IpcNBTGwDiag",
+       "IpcPGWCtrl",
+       "IpcSGWCtrl",
+       "IpctrustedVIN_Ctrl",
+       "IpcOnOffSend",
+       "IpcEnvSend",
+       "IpctrustedVIN_CtrlSend"
+      ],
+      "name": "v850ApplicationFlash",
+      "sha1": "487bf8b2201fa242a0e3603247ca3083535feb03",
+      "size": 786367,
+      "tag": "IOC_FLASH"
+     },
+     {
+      "address": 655872,
+      "family": "RH850",
+      "hwindex": "4-*",
+      "identity": {
+       "appl": "8140_APPL",
+       "bios_control": "BIOSControl V850",
+       "build": "Jan 27 2020 12:37:11",
+       "builder": "cbuild_ScPF",
+       "components": [
+        {
+         "date": "Jan 11 2017",
+         "name": "BMW UGW2",
+         "version": "V2.1.007"
+        },
+        {
+         "date": "Jan 11 2017",
+         "name": "BMW DiagnosticsRouter",
+         "version": "V2.1.005"
+        }
+       ],
+       "device": "Headunit D6",
+       "gateway_data": "V000-009-051-00337"
+      },
+      "ipc_channels": [
+       "IpcTest",
+       "cfDsi",
+       "cfSp",
+       "IpcEnv",
+       "IpcDGW",
+       "IpcSGW",
+       "IpcWatchDog",
+       "IpcTouch_O5",
+       "IpcTestSend",
+       "cfDsiData",
+       "cfAmpData",
+       "IpcSysSet",
+       "IpcAmpControl",
+       "IpcFANControl",
+       "IpcSGW_O5",
+       "IpcO5WatchDog",
+       "IpcTestO5",
+       "IpcWatchDogJ5Send",
+       "IpcWatchDogO5Send",
+       "IpcSysSetSend",
+       "cfMbxEvent",
+       "cfDrData",
+       "IpcOnOff",
+       "IpcRes03",
+       "IpcRes07",
+       "IpcRes12",
+       "IpcErrMemAppClient",
+       "IpcErrMemApp",
+       "IpcNBTGwDiag",
+       "IpcPGWCtrl",
+       "IpcSGWCtrl",
+       "IpctrustedVIN_Ctrl",
+       "IpcOnOffSend",
+       "IpcEnvSend",
+       "IpctrustedVIN_CtrlSend"
+      ],
+      "name": "rh850ApplicationFlash",
+      "sha1": "905ef9c37dc4fc5b443fb51e1e00f965efb5f1b7",
+      "size": 772970,
+      "tag": "IOC_FLASH"
+     }
+    ],
+    "file": "swfl_0000271a.bin.007_051_002"
+   }
+  },
+  "gateway": {
+   "007_051_002": {
+    "blocks": [
+     {
+      "address": 1441792,
+      "family": "V850",
+      "gateway_table": {
+       "header": "030014090812391a5d23e52be1341942",
+       "last_data_offset": 460103,
+       "pages_4k": 160,
+       "pages_4k_used": 113,
+       "sha1": "797c74e9758009c7bfc3b13d9685011a12e4b2ca",
+       "size": 655360
+      },
+      "hwindex": "2-3",
+      "name": "v850GWTableFlash",
+      "sha1": "797c74e9758009c7bfc3b13d9685011a12e4b2ca",
+      "size": 655360,
+      "tag": "GATEWAY_FLASH"
+     },
+     {
+      "address": 1441792,
+      "family": "RH850",
+      "gateway_table": {
+       "header": "030014090812391a5d23e52be1341942",
+       "last_data_offset": 460103,
+       "pages_4k": 160,
+       "pages_4k_used": 113,
+       "sha1": "797c74e9758009c7bfc3b13d9685011a12e4b2ca",
+       "size": 655360
+      },
+      "hwindex": "4-*",
+      "name": "rh850GWTableFlash",
+      "sha1": "797c74e9758009c7bfc3b13d9685011a12e4b2ca",
+      "size": 655360,
+      "tag": "GATEWAY_FLASH"
+     }
+    ],
+    "file": "swfl_0000271f.bin.007_051_002"
+   }
+  },
+  "rse": {
+   "007_051_002": {
+    "blocks": [
+     {
+      "address": 262208,
+      "family": "V850",
+      "hwindex": "3-*",
+      "identity": {
+       "appl": "8173_APPL",
+       "bios_control": "BIOSControl V850",
+       "bootloader_ids": [
+        "DV850T05xxxxxV107"
+       ],
+       "build": "May 24 2021 07:58:47",
+       "builder": "cbuild_ScPF",
+       "device": "RSE C1",
+       "device_ids": [
+        "UPD70F3554",
+        "UPD70F3558",
+        "UPD70F4006"
+       ]
+      },
+      "ipc_channels": [
+       "cfDsi",
+       "cfSp",
+       "IpcEnv",
+       "IpcWatchDog",
+       "cfDsiData",
+       "IpcSysSet",
+       "IpcAmpControl",
+       "IpcFANControl",
+       "IpcO5WatchDog",
+       "IpcWatchDogJ5Send",
+       "IpcSysSetSend",
+       "cfMbxEvent",
+       "IpcOnOff",
+       "IpcRes03",
+       "IpcRes05",
+       "IpcRes07",
+       "IpcRes08",
+       "IpcRes09",
+       "IpcRes12",
+       "IpcErrMemAppClient",
+       "IpcErrMemApp",
+       "IpcRes25",
+       "IpcRes26",
+       "IpcOnOffSend",
+       "IpcEnvSend"
+      ],
+      "name": "v850ApplicationRseFlash",
+      "sha1": "3e17814f2108cc0866ab9a75f31d34289e98f3be",
+      "size": 1179583,
+      "tag": "IOC_FLASH"
+     }
+    ],
+    "file": "swfl_00002734.bin.007_051_002"
+   }
+  }
+ }
+}

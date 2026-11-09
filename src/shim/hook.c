@@ -45,6 +45,10 @@ static void send_ctrl(u32 key,int pressed,int repeat,int longp,int unit){ void*(
   typedef void(*pushf)(void*,void*); ((pushf)((u32*)*(u32*)p)[7])(p,ev); }
 extern void *_Z14getHmiProcUnitv(void);
 static u8 *main_pu;      /* 0x20f518 (getHmiProcUnit) usa TLS e devolve 0 em outros threads: guarda o do thread principal */
+/* O HMI tem vários proc units (um por subsistema, cada um com seu thread e seu updateAliveTime); só o da aplicação trata o controlador. O main_pu é o do
+   último thread a passar por hk_alive: empurrados nele, os eventos do controlador iam para a fila de um proc unit qualquer e se perdiam (no teste, 2 de 13
+   giros chegavam). app_pu é o proc unit do thread que registra a tela inicial (hk_stc), o mesmo que despacha os eventos do controlador: push_ctrl usa ele. */
+static u8 *app_pu;
 /* Ligar o HMI ("auto power on"): no thread principal (updateAliveTime). */
 static void auto_power_on(void){ static int t,done; if(!done&&hook_home()&&++t>AUTO_POWER_TICKS){ done=1; u8*pu=((u8*(*)(void))0x20f518)(); br_log("auto power on"); ((void(*)(void*,u32))0x2152c4)(pu,3); ((u8*)hook_home())[0x33b]=1; ((u8*)hook_home())[0x33a]=0; } }
 /* Entrada do host: thread própria a cada 15 ms. Antes era lida em updateAliveTime, que com o relógio correto do guest (cntfrq) só roda ~1x/s com a tela parada: cada comando atrasava até 1 s.
@@ -52,10 +56,10 @@ static void auto_power_on(void){ static int t,done; if(!done&&hook_home()&&++t>A
    hk_alive esvazia, e um evento vazio na fila acorda o laço principal para isso acontecer logo. */
 void (*ilm_main_cb)(void); volatile int ilm_main_want;   /* avisos da ILM a entregar no thread principal (src/shim/ilm.c) */
 typedef void(*pushf)(void*,void*);
-static void push_ctrl(u32 key,u32 pressed,int param){ u8 *c=((u8*(*)(void))0x24a004)(); *(u32*)(c+0x18)=key; c[0x1c]=pressed; *(int*)(c+0x20)=param; c[0x24]=0; ((pushf)((u32*)*(u32*)main_pu)[7])(main_pu,c); }
+static void push_ctrl(u32 key,u32 pressed,int param){ u8 *pu=app_pu?app_pu:main_pu; u8 *c=((u8*(*)(void))0x24a004)(); *(u32*)(c+0x18)=key; c[0x1c]=pressed; *(int*)(c+0x20)=param; c[0x24]=0; ((pushf)((u32*)*(u32*)pu)[7])(pu,c); }
 static void touch_send(u32 state,u32 x,u32 y,u32 hms);
 #define RINGN 256
-static u32 ring[RINGN][4]; static volatile u32 ring_w, ring_r;
+static u32 ring[RINGN][4]; static volatile u32 ring_w, ring_r; static volatile int wake_pending;
 void input_pump(void){ u32 *p,*rep; u32 n;
   if(!main_pu) return;
   LOCK(); p=br_begin(OP_GETINPUT,0); n=br_sync(&rep); static u32 ev[64*4]; if(n>sizeof ev) n=sizeof ev; memcpy(ev,rep,n); UNLOCK();
@@ -66,7 +70,7 @@ void input_pump(void){ u32 *p,*rep; u32 n;
     if(e[0]==30){ void *rd=*(void**)0x3af0a1c; if(rd) ((void(*)(void*,u32))0x2a0c498)(rd,e[1]); continue; }   /* imagem nova do mapa: o que o sinal do LayerManager faria (CHmiSurfaceRedirection::notifyUpdate) */
     if(ring_w-ring_r<RINGN){ memcpy(ring[ring_w%RINGN],e,16); __atomic_add_fetch(&ring_w,1,__ATOMIC_RELEASE); wake=1; }
   }
-  if(wake||ilm_main_want) push_ctrl(0,0,0);
+  if((wake||ilm_main_want)&&!wake_pending){ wake_pending=1; push_ctrl(0,0,0); }   /* um só evento de acordar até o thread da aplicação passar por input_main: com ele ocupado (abrindo um menu) saíam dezenas, um a cada 15 ms */
 }
 /* toque na tela (CID): monta um CTouchData e o entrega a CTouchDataClient::forwardTouchData (assíncrono), como o driver do touchscreen faria.
    Layout (ver docs/TOQUE.md): CTouchData{vptr, vector<dedo> @4, u8 @0x10 (tem de ser 0), tempo @0x14, origem @0x18}; dedo = 10 bytes {u16 x,u16 y,u16 z,u8 tipo,u8 estado,u8 id,u8 0};
@@ -100,7 +104,7 @@ static void touch_send(u32 state,u32 x,u32 y,u32 hms){
 /* no thread principal */
 static void input_main(u8 *pu){
   /* o tratamento de uma tecla pode rodar um laço aninhado e voltar a updateAliveTime: sem esta trava, o mesmo evento era tratado sem fim (HMI travado, morto pelo watchdog) */
-  static int busy; if(busy) return; busy=1;
+  static int busy; if(busy) return; busy=1; wake_pending=0;
   while(ring_r!=__atomic_load_n(&ring_w,__ATOMIC_ACQUIRE)){ u32 ee[4]; memcpy(ee,ring[ring_r%RINGN],16); __atomic_add_fetch(&ring_r,1,__ATOMIC_RELEASE); u32 *e=ee;
     if(e[0]==1&&e[3]==1){ push_ctrl(e[1],e[2]!=0,1); }
     else if(e[0]==40){ touch_send(e[1],e[2]&0xffff,e[2]>>16,e[3]==0xffff?0:e[3]); }
@@ -115,7 +119,7 @@ static void input_main(u8 *pu){
   if(ilm_main_want&&ilm_main_cb){ ilm_main_want=0; ilm_main_cb(); }
   busy=0; }
 static void *home_app; void *hook_home(void){ return home_app; } static int (*stc_tramp)(void*,u32,u32,u32);
-static int hk_stc(void *t,u32 a,u32 b,u32 c){ home_app=t; return stc_tramp(t,a,b,c); }
+static int hk_stc(void *t,u32 a,u32 b,u32 c){ home_app=t; if(!app_pu){ app_pu=((u8*(*)(void))0x20f518)(); br_logx("app proc unit",(u32)app_pu,app_pu?*(u32*)app_pu:0,0); } return stc_tramp(t,a,b,c); }
 static u32 (*reg_tramp)(void*,void*,u32,u32,u32,u32);
 static u32 hk_reg(void *pu,void *tgt,u32 fn,u32 adj,u32 grp,u32 ty){ if(grp==*(u16*)0x3af08cc||(u16)grp==*(u16*)0x3af08cc) br_logx("reg ctrl listener",fn,(u32)tgt,ty); return reg_tramp(pu,tgt,fn,adj,grp,ty); }
 static u32 (*add_tramp)(void*,void*,u32,u32,u32,u32);

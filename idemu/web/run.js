@@ -96,9 +96,20 @@
     const bezelBox = h('div', { class: 'bmw-bezel' },
       bezelImg,
       h('div', { class: 'bezel-hole' }, dispWrap, h('div', { class: 'glare' })));
+    // moldura (foto da central) ou só a imagem da tela; a escolha fica salva neste navegador
+    const frameBtns = {};
+    const frameSeg = h('div', { class: 'seg frame-seg', role: 'group', 'aria-label': 'Moldura da tela' },
+      [['bezel', 'Moldura', 'Mostrar a foto da central multimídia em volta da tela'], ['plain', 'Só a tela', 'Mostrar só a imagem da tela, sem moldura']].map(([m, l, tip]) =>
+        (frameBtns[m] = h('button', { type: 'button', class: 'segb', title: tip, onclick: () => setFrame(m) }, l))));
+    function setFrame(m) {
+      bezelBox.classList.toggle('plain', m === 'plain');
+      Object.keys(frameBtns).forEach((k) => { frameBtns[k].classList.toggle('on', k === m); frameBtns[k].setAttribute('aria-pressed', String(k === m)); });
+      IDE.pref.set('screenFrame', m);
+    }
     const dispCard = h('div', { class: 'card display-card' },
-      h('div', { class: 'card-title' }, h('span', null, 'Display do carro'), dispSize),
+      h('div', { class: 'card-title' }, h('span', null, 'Display do carro'), h('div', { class: 'disp-meta' }, dispSize, frameSeg)),
       bezelBox);
+    setFrame(IDE.pref.get('screenFrame', 'bezel') === 'plain' ? 'plain' : 'bezel');
 
     // rotor + botões
     const rotorHost = h('div', { class: 'rotor-host', html: rotorSVG() });
@@ -344,13 +355,48 @@
       TABS.forEach(([id]) => { const t = R.tabs[id]; if (t && t.api.onStatus) t.api.onStatus(s); });
     }
     /* quadros: pede sempre o próximo ao servidor (ele segura a resposta até haver um novo), sem acoplar a tela ao laço de status */
-    const ctx2d = img.getContext('2d', { alpha: false, desynchronized: true });
+    /* WebGL: o quadro (RGB ou RGBA) vai direto para uma textura na GPU, sem laço por pixel em JavaScript. Sem WebGL, cai no canvas 2D. */
+    function glPainter(cv) {
+      let gl = null;
+      try { gl = cv.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false, desynchronized: true, powerPreference: 'low-power' }); } catch (e) { gl = null; }
+      if (!gl) return null;
+      let tex = null, tw = 0, th = 0, tf = 0, lost = false;
+      function init() {
+        const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+        const p = gl.createProgram();
+        gl.attachShader(p, sh(gl.VERTEX_SHADER, 'attribute vec2 p;varying vec2 v;void main(){v=vec2(p.x+1.0,1.0-p.y)*0.5;gl_Position=vec4(p,0.0,1.0);}'));
+        gl.attachShader(p, sh(gl.FRAGMENT_SHADER, 'precision mediump float;uniform sampler2D t;varying vec2 v;void main(){gl_FragColor=vec4(texture2D(t,v).rgb,1.0);}'));
+        gl.linkProgram(p);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return false;
+        gl.useProgram(p);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+        const loc = gl.getAttribLocation(p, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+        [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([k, v]) => gl.texParameteri(gl.TEXTURE_2D, k, v));
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        tw = th = tf = 0; return true;
+      }
+      cv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; });
+      cv.addEventListener('webglcontextrestored', () => { lost = !init(); });
+      if (!init()) return null;
+      return function draw(px, w, hh, rgba) {
+        if (lost) return;
+        const f = rgba ? gl.RGBA : gl.RGB, data = new Uint8Array(px.buffer, px.byteOffset, w * hh * (rgba ? 4 : 3));
+        if (w !== tw || hh !== th || f !== tf) { gl.texImage2D(gl.TEXTURE_2D, 0, f, w, hh, 0, f, gl.UNSIGNED_BYTE, data); tw = w; th = hh; tf = f; gl.viewport(0, 0, w, hh); }
+        else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, hh, f, gl.UNSIGNED_BYTE, data);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      };
+    }
+    const glDraw = glPainter(img);
+    const ctx2d = glDraw ? null : img.getContext('2d', { alpha: false, desynchronized: true });
     let imgData = null;
     function paint(rgb, w, hh, rgba) {
       if (img.width !== w || img.height !== hh) {
         img.width = w; img.height = hh; imgData = null;
         dispWrap.style.aspectRatio = w + ' / ' + hh; dispWrap.style.setProperty('--ar', String(w / hh)); dispSize.textContent = R.status && R.status.kind === 'cic' ? IDE.t('{w} × {h} · sem tela de toque (use o controlador)', { w, h: hh }) : IDE.t('{w} × {h} · clique na tela para tocar', { w, h: hh });
       }
+      if (glDraw) { glDraw(rgb, w, hh, rgba); return; }
       if (rgba) { ctx2d.putImageData(new ImageData(new Uint8ClampedArray(rgb.buffer, rgb.byteOffset, w * hh * 4), w, hh), 0, 0); return; }     // RGBA pronto: sem laço por pixel
       if (!imgData) { imgData = ctx2d.createImageData(w, hh); imgData.data.fill(255); }
       const o = imgData.data, n = w * hh;

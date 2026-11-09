@@ -171,7 +171,7 @@ class V850Tests(unittest.TestCase):
         self.assertEqual(m[20:], struct.pack('<IHIH', 7, 0, 1, 0x0200))
         m = self._recv_bridge()
         self.assertEqual((m[6] | (m[7] << 8)), 2)                                   # RegisterDevices
-        self.assertEqual(struct.unpack_from('<IHI', m, 20), (7, 0, len(most.MostBridge.CORE_DEVICES) + len(most.MostBridge.NAV_DEVICES)))
+        self.assertEqual(struct.unpack_from('<IHI', m, 20), (7, 0, len(most.MostBridge.CORE_DEVICES) + len(most.MostBridge.NAV_DEVICES) + len(most.MostBridge.PHONE_DEVICES)))
         notif = most.MostMessage(0x2007, 0x2001, 0x40, 1, 1, most.MostMessage.OP_SET, bytes([1, 0x20, 0x01, 0x0c, 0x2b]))
         self.guest.send(v850.TX, ipc_msg(25, self._bridge_hdr(0x8001, struct.pack('<I', 0) + notif.pack())))
         m = self._recv_bridge()
@@ -180,6 +180,18 @@ class V850Tests(unittest.TestCase):
         self.assertEqual((r.dst, r.src, r.fblock, r.func, r.op), (0x2001, 0x2007, 0x40, 1, most.MostMessage.OP_STATUS))
         self.assertEqual(self.link.bridge.subs[(0x40, 1)], {0x0c2b: 0x2001})
         self.assertEqual(self.link.bridge.publish(0x40, 0x0c2b, b'\x05'), 1)
+
+    def test_phone_devices_and_bluetooth_status(self):
+        """Telefone (PHONE_TYPE codificado): Bluetooth, Telephone e PhoneBook registrados no boot; Status de Bluetooth com os tamanhos lidos do HMI."""
+        from idemu import most
+        for d in ((0x54, 0), (0x50, 1), (0x50, 2), (0x50, 3), (0x50, 4), (0x51, 0)):
+            self.assertIn(d, most.MostBridge.PHONE_DEVICES)
+        self.assertTrue(set(most.MostBridge.PHONE_DEVICES) <= set(most.MostBridge.hmi_devices()))
+        car = self.link.bridge.car
+        self.assertEqual(car.status_for(0x54, 0, 0x200), b'\x01')            # CBluetoothEnable: u8 bool
+        self.assertEqual(car.status_for(0x54, 0, 0xC0B), b'\x00\x00')       # CBTServiceUnavailable: 2 x u8 ("All available")
+        self.assertEqual(car.status_for(0x54, 0, 0xC0D), b'\x00\x00')       # CBluetoothServiceActivationState: 2 x u8
+        self.assertIsNone(car.status_for(0x54, 0, 0x402))                     # CUserFriendlyName: layout não levantado
 
     def test_most_message_codec(self):
         from idemu import most
@@ -231,6 +243,24 @@ class V850Tests(unittest.TestCase):
         b.on_most(notif)
         self.assertEqual(len(sent), 2)
 
+    def test_short_map_mode_telegram_is_answered(self):
+        # Set do modo do mapa (MapControl 0xDA/1 0x222) com 1 byte de dados: antes era descartado pelo tamanho mínimo e a tile Navegação ficava preta
+        from idemu import most
+        class Link(object):
+            bridge_auto = False
+            def log(self, *a): pass
+            def send(self, chan, frame): pass
+        b = most.MostBridge(Link())
+        sent = []
+        b.send_most = sent.append
+        def frame(m):
+            p = struct.pack('<I', 0) + m.pack()
+            return bytes((1, 0)) + struct.pack('<HBBHH', 0x04f1, 4, 5, 0x8001, 20 + len(p)) + bytes(10) + p
+        b.on_message(frame(most.MostMessage(0x2001, 0x2000, 0xDA, 1, 0x222, most.MostMessage.OP_SET, b'\x37')))
+        self.assertEqual([(m.func, m.op, m.data) for m in sent], [(0x222, most.MostMessage.OP_STATUS, b'\x37')])
+        b.on_message(frame(most.MostMessage(0x2001, 0x2000, 0xDA, 1, 0x222, most.MostMessage.OP_GET)))     # Get sem dados: responde com o valor atual
+        self.assertEqual((sent[-1].func, sent[-1].op, sent[-1].data, sent[-1].dst), (0x222, most.MostMessage.OP_STATUS, b'\x37', 0x2000))
+
     def test_nav_position_payload_layout(self):
         from idemu import most
         class Gps(object):
@@ -267,6 +297,39 @@ class V850Tests(unittest.TestCase):
         self.assertEqual(car.publish_all(), 0)                     # nada mudou: não reenvia
         car.avg_speed = 40.0
         self.assertEqual(car.publish_all(), 1)                     # mudou: reenvia
+
+    def test_car_feed_range_and_trip(self):
+        """Kombi: autonomia (0x504 e 0x512) a partir de fuel_level e início/tempo/distância da viagem (0x510/0x511) a partir do hodômetro."""
+        import time
+        from idemu import most
+        class FakeCan(object):
+            vals = {'fuel_level': 30.0, 'fuel_consumption': 7.5, 'odometer': 45230.0}
+            def get_signal(self, n): return self.vals.get(n)
+        car = most.MostCar(None)
+        self.assertEqual(car.status_for(0xE0, 0, 0x510), bytes(8))  # sem CAN não há viagem: fica o padrão de zeros
+        car.can = FakeCan()
+        car.avg_cons = 6.0
+        d504, d512 = car.status_for(0xE0, 0, 0x504), car.status_for(0xE0, 0, 0x512)
+        self.assertEqual(d504, struct.pack('>HHHB', 0, 500, 0, 0))                    # 30 l / 6 l/100 km = 500 km (é este que o "Computador de bordo" mostra)
+        self.assertEqual(len(d512), 9)
+        self.assertEqual(struct.unpack('>HBBBBBH', d512), (0, 0, 30, 0, 0, 0, 500))   # estado 0 (2/3 seriam descartados) e autonomia no último u16
+        FakeCan.vals['fuel_level'] = 10.0
+        self.assertEqual(struct.unpack('>HHHB', car.status_for(0xE0, 0, 0x504))[1], 166)
+        car.avg_cons = 0.0                                                             # sem média ainda: consumo instantâneo
+        self.assertEqual(struct.unpack('>HHHB', car.status_for(0xE0, 0, 0x504))[1], 133)
+        FakeCan.vals['fuel_level'] = 999.0                                             # limites dos campos (0xFA0 em 0x504, 0xFFE em 0x512)
+        self.assertEqual(struct.unpack('>HHHB', car.status_for(0xE0, 0, 0x504))[1], 0xFA0)
+        self.assertLessEqual(struct.unpack('>HBBBBBH', car.status_for(0xE0, 0, 0x512))[6], 0xFFE)
+        car.trip_start, car.trip_odo = time.time() - (2 * 3600 + 5 * 60 + 3), 45200.0
+        t = time.localtime(car.trip_start)
+        self.assertEqual(car.status_for(0xE0, 0, 0x510), struct.pack('>HHBBBB', 0, t.tm_year, t.tm_mday, t.tm_hour, t.tm_min, t.tm_mon))
+        self.assertEqual(struct.unpack('>HHBHh', car.status_for(0xE0, 0, 0x511)), (0, 2, 5, 30, 0))   # 2 h 5 min, 30 km
+        import os
+        os.environ['IDEMU_KOMBI_SKIP'] = '511'
+        try:
+            self.assertEqual(car.status_for(0xE0, 0, 0x511), bytes(9))               # depuração: volta ao padrão de zeros
+        finally:
+            del os.environ['IDEMU_KOMBI_SKIP']
 
     def test_car_feed_vehicle_payloads(self):
         """Vehicle (0x05/0): pneus, câmbio, marcha à ré, velocidade e terminal vindos do CAN virtual."""

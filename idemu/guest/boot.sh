@@ -12,6 +12,12 @@ ln -sP /fs/shim/lib/libGLESv2.so.1 /lib/libGLESv2.so.1
 ln -sP /fs/shim/lib/libilmClient.gpp.so.1 /opt/sys/lib/libilmClient.gpp.so.1
 ln -sP /fs/shim/lib/libBMWOTFapi.so.3 /opt/hmi/otf/libBMWOTFapi.so.3
 ln -sP /fs/shim/lib/ioipc-idemu.so /lib/ioipc-idemu.so
+# plugins de teste (idemu/plugins/): copiados para a RAM no começo do boot; o disco de shim é sobrescrito em execução
+if [ -d /fs/shim/plug ]; then
+  mkdir -p /dev/shmem/plug
+  for d in /fs/shim/plug/*; do n=${d##*/}; mkdir -p /dev/shmem/plug/$n; cp $d/* /dev/shmem/plug/$n/; done
+  ln -sP /dev/shmem/plug /opt/hmi/ID5/data/ro/Plugins
+fi
 export SYSNAME=nto TEMP=/dev/shmem HOME=/dev/shmem QNX_VERSION=qnx650 PROCESSOR=armle-v7 HOSTNAME=hu-omap BOOTMODE=TCFG MALLOC_MMAP_NOZERO=1
 . /fs/shim/env.sh
 mkdir -p /dev/shmem/idemu 2>/dev/null
@@ -29,8 +35,9 @@ ksh /fs/shim/rc.sh > /var/rc.log 2>&1
 echo IDEMU_STAGE hmi
 [ "$HMI_DELAY" -gt 0 ] && sleep $HMI_DELAY
 cd /opt/hmi
+# IDEMU_HMI_ON (runtime, com 2 núcleos): "on -R 1" prende o HMI e suas threads no CPU0, como num núcleo só; os demais serviços usam o CPU1
 # IDEMU_NO_HMI=1 (depuração): não inicia o HMI — os serviços ficam sozinhos, sem o laço de reinício que satura a CPU
 if [ -z "$IDEMU_NO_HMI" ]; then
-while : ; do /opt/hmi/bin/HmiMain3D -c=DSI,MOSTSubSystem -ro=/opt/hmi/data/ro/ -rw=/var/opt/hmi/data/rw/ -sp=/var/opt/hmi/data/rw/ -vp=/opt/hmi/data/ro/ -cp=/opt/hmi/data/ro/ -iba1=/mnt/data/iba/swe1/ -iba2=/mnt/data/iba/anim-all/swe2/ -h=${IDEMU_HMI_HEARTBEAT:-10000} -z=4 -os=0 > /var/hmi.log 2>&1; s=$?; echo "HMI exit status $s at $(date)" >> /var/hmi.exit; echo "IDEMU_HMI_EXIT $s" ; sleep 3; done &
+while : ; do $IDEMU_HMI_ON /opt/hmi/bin/HmiMain3D -c=DSI,MOSTSubSystem -ro=/opt/hmi/data/ro/ -rw=/var/opt/hmi/data/rw/ -sp=/var/opt/hmi/data/rw/ -vp=/opt/hmi/data/ro/ -cp=/opt/hmi/data/ro/ -iba1=/mnt/data/iba/swe1/ -iba2=/mnt/data/iba/anim-all/swe2/ -h=${IDEMU_HMI_HEARTBEAT:-10000} -z=4 -os=0 > /var/hmi.log 2>&1; s=$?; echo "HMI exit status $s at $(date)" >> /var/hmi.exit; echo "IDEMU_HMI_EXIT $s" ; sleep 3; done &
 fi
 echo IDEMU_STAGE up

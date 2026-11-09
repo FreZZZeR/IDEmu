@@ -15,6 +15,9 @@ KEYS = {'MENU': 1, 'BACK': 2, 'OPTION': 3, 'CD': 4, 'RADIO': 5, 'TEL': 6, 'NAV':
 CPU = 'cortex-a15,cntfrq=6144000,has_el3=off,has_el2=off'
 # bits forçados na leitura do banco de registradores da placa: 0x4a008f00 e 0x4a004400 = CLKACTIVITY (a inicialização esperava 12 milhões de voltas, ~9,5 s, por cada um)
 SETBITS = '0x4a096804=2,0x4809a130=0x26,0x4a008f00=0x100,0x4a004400=0x100'
+# núcleos do OMAP5 emulados (1 ou 2). Com 2, cada vCPU roda numa thread do Mac (MTTCG) e o QNX (procnto-smp) distribui HMI e serviços entre eles.
+SMP = max(1, min(2, int(os.environ.get('IDEMU_SMP', '1') or 1)))
+QEMU_ARM = os.environ.get('IDEMU_QEMU_ARM') or os.path.join(BIN, 'qemu-system-arm')
 
 def _unix_connect(path, timeout=30):
     end = time.time() + timeout
@@ -114,8 +117,8 @@ class Runtime:
     # ---------- boot rápido (snapshot) ----------
     def snapshot_key(self):
         """Muda quando qualquer coisa que o snapshot embute muda: imagens (inclusive shim.img, onde fica a codificação), binários, CPU."""
-        parts = [SNAP_FORMAT, CPU, SETBITS, os.environ.get('IDEMU_CPU'), os.environ.get('IDEMU_QEMU_EXTRA')]
-        for p in [os.path.join(self.img, n) for n in ('boot.ifs', 'sda.img', 'sdb.img', 'shim.img')] + [os.path.join(BIN, 'qemu-system-arm'), os.path.join(BIN, 'glhost'), os.path.join(HERE, 'data', 'stub.bin')]:
+        parts = [SNAP_FORMAT, CPU, SETBITS, os.environ.get('IDEMU_CPU'), os.environ.get('IDEMU_QEMU_EXTRA')] + ([SMP] if SMP > 1 else [])
+        for p in [os.path.join(self.img, n) for n in ('boot.ifs', 'sda.img', 'sdb.img', 'shim.img')] + [QEMU_ARM, os.path.join(BIN, 'glhost'), os.path.join(HERE, 'data', 'stub.bin')]:
             st = os.stat(p); parts.append((os.path.basename(p), st.st_size, int(st.st_mtime)))
         return hashlib.sha256(repr(parts).encode()).hexdigest()
 
@@ -171,7 +174,8 @@ class Runtime:
         self.step = 'Iniciando renderizador'; self.pct = 3
         self._spawn('gl', [B + 'glhost'], env=env, stdout=self._log('renderer.log'), stderr=subprocess.STDOUT, cwd=B)
         I = self.img + '/'
-        args = [B + 'qemu-system-arm', '-M', 'omap5-uevm', '-m', '2048', '-cpu', os.environ.get('IDEMU_CPU', CPU), '-display', 'none',
+        args = [QEMU_ARM, '-M', 'omap5-uevm', '-m', '2048', '-cpu', os.environ.get('IDEMU_CPU', CPU), '-display', 'none',
+                '-smp', str(SMP), '-accel', 'tcg,thread=multi' if SMP > 1 else 'tcg',
                 '-serial', 'unix:%s,server,nowait' % ser, '-serial', 'unix:%s,server,nowait' % ser2,
                 '-serial', 'unix:%s,server,nowait' % ser1, '-serial', 'unix:%s,server,nowait' % ser4, '-monitor', 'none',
                 '-qmp', 'unix:%sqmp.sock,server,nowait' % R]
@@ -288,7 +292,7 @@ class Runtime:
                ('mkdir -p $R/var/opt/hmi/data/rw $R/var/opt/sys $R/var/dump', 30, None, 28),
                ('ln -sP $R/bin /bin; ln -sP $R/lib /lib; ln -sP $R/etc /etc; ln -sP $R/opt /opt; ln -sP $R/var /var', 30, None, 29),
                ('ln -sP /opt/hmi/ID5/bin /opt/hmi/bin; ln -sP /opt/hmi/ID5/lib /opt/hmi/lib; ln -sP /opt/hmi/ID5/data /opt/hmi/data; ln -sP /fs/sdb0/ro /opt/hmi/ID5/data/ro', 30, None, 29),
-               ('HMI_DELAY=%s IDEMU_TCPDUMP=%s IDEMU_SB_VERBOSE=%s IDEMU_NO_HMI=%s ksh /fs/shim/boot.sh' % (os.environ.get('IDEMU_HMI_DELAY', '0'), os.environ.get('IDEMU_TCPDUMP', ''), os.environ.get('IDEMU_SB_VERBOSE', ''), os.environ.get('IDEMU_NO_HMI', '')), 300, 'Iniciando serviços do sistema', 30)]
+               ('HMI_DELAY=%s IDEMU_HMI_ON="%s" IDEMU_TCPDUMP=%s IDEMU_SB_VERBOSE=%s IDEMU_NO_HMI=%s ksh /fs/shim/boot.sh' % (os.environ.get('IDEMU_HMI_DELAY', '0'), os.environ.get('IDEMU_HMI_ON', 'on -R 1' if SMP > 1 else ''), os.environ.get('IDEMU_TCPDUMP', ''), os.environ.get('IDEMU_SB_VERBOSE', ''), os.environ.get('IDEMU_NO_HMI', '')), 300, 'Iniciando serviços do sistema', 30)]
         stage_pct = {'services': 35, 'hmi': 48, 'up': 55}
         hmi_t = [None]; hmi_seq = [0]; last_fs = [0]; last_chg = [time.time()]
         def scan(out):

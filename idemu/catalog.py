@@ -88,8 +88,9 @@ FEATURES = [('screen', 'Tela e interface real do HMI'), ('touch', 'Toque na tela
             ('map', 'GPS e mapa'), ('cluster', 'Cluster e HUD'), ('phone', 'Celular conectado'), ('coding', 'Editor de codificação'),
             ('ssh', 'Acesso SSH'), ('media', 'Rádio, mídia e áudio'), ('usb', 'Pen drive'), ('stable', 'Estabilidade')]
 LEVEL_NOTES = {
-    'id6': {'can': ('half', 'Velocidade, marcha, terminal e estado dos pneus chegam ao HMI; autonomia, tanque e computador de bordo ainda não'), 'cluster': ('half', 'Painel virtual pelo CAN e pelo GPS; o HMI não manda conteúdo a ele'),
-            'media': ('none', 'Sem rádio nem fonte de áudio'), 'usb': ('none', 'Sem controlador USB virtual')},
+    'id6': {'can': ('half', 'Velocidade, marcha, terminal, estado dos pneus, autonomia e computador de viagem chegam ao HMI; as pressões dos pneus ainda não aparecem'), 'cluster': ('half', 'Painel virtual pelo CAN e pelo GPS; o HMI não manda conteúdo a ele'),
+            'media': ('none', 'Sem rádio nem fonte de áudio'), 'usb': ('none', 'Sem controlador USB virtual'),
+            'phone': ('full', 'Tela, toque, botões e GPS pelo celular (Wi-Fi); com PHONE_TYPE=internal_phone na codificação o HMI mostra Telefone, Bluetooth e Dispositivos móveis, mas nenhum celular pareia (sem rádio Bluetooth nem USB)')},
     'id5': {'touch': ('half', 'A tela leva vários segundos para refletir cada toque'), 'rotor': ('half', 'A tela leva vários segundos para refletir cada entrada'),
             'can': ('half', 'Mesma ponte do iDrive 6, menos testada'), 'map': ('none', 'O HMI cai nos menus de navegação; mapa não verificado'),
             'cluster': ('half', 'Painel virtual pelo CAN e pelo GPS; o HMI não manda conteúdo a ele'), 'media': ('none', 'Sem rádio nem fonte de áudio'),

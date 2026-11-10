@@ -94,7 +94,7 @@ for line in SPEC.strip().splitlines():
         if c == 'f': call.append(f'bitsf(a[{i}])')
         elif c == 'p': call.append(f'(const void *)a[{i}]')
         elif c == 's':
-            pre += f'char *s{i} = scratch(c, a[{i}]); rd(c, s{i}, a[{i}]); '
+            pre += f'char *s{i} = str_payload(c, a[{i}]); '
             call.append(f's{i}')
         elif c == 'i': call.append(f'(int)a[{i}]')
         elif c == 'b': call.append(f'(unsigned char)a[{i}]')

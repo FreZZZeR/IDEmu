@@ -1,5 +1,5 @@
 """Catálogo do PSDZData: séries, chassis, pacotes SWFL necessários e versões disponíveis."""
-import os, re, json, glob
+import os, re, json, glob, threading
 from . import codegen
 
 SETTINGS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'settings.json')
@@ -8,9 +8,15 @@ def load_settings():
     try: return json.load(open(SETTINGS))
     except Exception: return {}
 
+_SETTINGS_LOCK = threading.Lock()
+
 def save_settings(d):
-    s = load_settings(); s.update(d)
-    json.dump(s, open(SETTINGS, 'w'), indent=1)
+    # ler, juntar e gravar sob trava, num arquivo temporário trocado de uma vez: dois pedidos ao mesmo tempo (zoom do mapa) apagavam psdz_path e o idioma
+    with _SETTINGS_LOCK:
+        s = load_settings(); s.update(d)
+        tmp = SETTINGS + '.tmp'
+        with open(tmp, 'w') as f: json.dump(s, f, indent=1)
+        os.replace(tmp, SETTINGS)
 
 # Séries com NBT Evo (iDrive 5/6) e os chassis de cada uma, conferidos na base KIS da PSdZData (kiswb/<série>/KIS.data, campo EBR dos tipos de veículo).
 SERIES_INFO = {

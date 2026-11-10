@@ -171,9 +171,16 @@ static char *xlat_shader(const char *src, int n, int is_vs) {
 
 static void save_frame(void) {
   if (!winfbo) return;
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, winfbo); glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  GLint rfb = 0, pbo = 0, rl = 0, sr = 0, sp = 0; glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &rfb); glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &pbo);
+  glGetIntegerv(GL_PACK_ROW_LENGTH, &rl); glGetIntegerv(GL_PACK_SKIP_ROWS, &sr); glGetIntegerv(GL_PACK_SKIP_PIXELS, &sp);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, winfbo); glBindBuffer(GL_PIXEL_PACK_BUFFER, 0); glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glPixelStorei(GL_PACK_ROW_LENGTH, 0); glPixelStorei(GL_PACK_SKIP_ROWS, 0); glPixelStorei(GL_PACK_SKIP_PIXELS, 0);   // estado do guest não pode estourar o buffer do quadro
   glReadPixels(0, 0, winw, winh, GL_RGBA, GL_UNSIGNED_BYTE, frame);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, rfb); glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo);
+  glPixelStorei(GL_PACK_ROW_LENGTH, rl); glPixelStorei(GL_PACK_SKIP_ROWS, sr); glPixelStorei(GL_PACK_SKIP_PIXELS, sp);
   // linha 0 = topo
+  // [3] = quadro em escrita, [2] = último quadro completo: o leitor descarta a cópia se [3] mudou ou difere de [2] (sem isso, um quadro rasgado passava)
+  shm_hdr[3] = (int)(frames + 1); __sync_synchronize();
   u8 *dst = shm + 64; size_t row = (size_t)winw * 4;
   for (int y = 0; y < winh; y++) {                 // vira o quadro (linha 0 = topo) e deixa o alfa opaco: o navegador usa o RGBA direto
     const u32 *a = (const u32 *)(frame + (size_t)(winh - 1 - y) * row); u32 *b = (u32 *)(dst + (size_t)y * row);
@@ -299,10 +306,15 @@ static void init_surface(u32 id, int w, int h) {
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, winrb);
   glViewport(0, 0, w, h); glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
   free(frame); frame = malloc((size_t)w * h * 4);
+  // o arquivo só cresce (sem O_TRUNC): o IDEmu (Python) o mantém mapeado, e um arquivo encolhido sob o mapeamento derruba o servidor com SIGBUS
+  size_t need = 64 + (size_t)w * h * 4; char p[600]; snprintf(p, sizeof p, "%s/frame.rgba", outdir);
+  int fd = open(p, O_RDWR | O_CREAT, 0644); struct stat st;
+  if (fd < 0 || fstat(fd, &st) != 0 || ((size_t)st.st_size < need && ftruncate(fd, need) != 0)) die("glhost7: não deu para criar frame.rgba");
   if (shm) munmap(shm, shm_size);
-  shm_size = 64 + (size_t)w * h * 4; char p[600]; snprintf(p, sizeof p, "%s/frame.rgba", outdir);
-  int fd = open(p, O_RDWR | O_CREAT | O_TRUNC, 0644); ftruncate(fd, shm_size); shm = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); close(fd);
-  shm_hdr = (int *)shm; shm_hdr[0] = w; shm_hdr[1] = h; shm_hdr[2] = 0; frames = 0;
+  shm_size = need > (size_t)st.st_size ? need : (size_t)st.st_size;
+  shm = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); close(fd);
+  if (shm == MAP_FAILED) die("glhost7: mmap de frame.rgba falhou");
+  shm_hdr = (int *)shm; shm_hdr[0] = w; shm_hdr[1] = h; shm_hdr[3] = shm_hdr[2]; frames = (u32)shm_hdr[2];   // seq continua de onde estava
   fprintf(stderr, "glhost7: superfície %dx%d\n", w, h);
 }
 
@@ -336,7 +348,8 @@ int main(int argc, char **argv) {
   }
   for (;;) {
     u64 t_a = prof ? nsec() : 0; u32 h[2]; at_hdr = 1; rdn(h, 8); u32 op = h[0], len = h[1];
-    if (len > cap) { cap = len + 4096; buf = realloc(buf, cap); }
+    if (len > (64u << 20)) die("glhost7: mensagem grande demais no anel");
+    if (len > cap) { cap = (size_t)len + 4096; buf = realloc(buf, cap); if (!buf) die("glhost7: sem memória"); }
     if (len) rdn(buf, len);
     u64 t_b = prof ? nsec() : 0; if (prof) p_idle_ns += t_b - t_a;
     u32 *w = (u32 *)buf; cmds++;
@@ -345,10 +358,10 @@ int main(int argc, char **argv) {
     case OP_SWAP: if (replaying) { replay_swaps++; rep32(1); break; } glFlush(); save_frame(); rep32(1); break;
     case OP_GEN: { u32 k = w[0], n = w[1]; for (u32 i = 0; i < n; i++) { u32 id = w[2 + i]; if (id < IDMAX) idmap[id] = gen1(k); if (k == 5) {} } break; }
     case OP_DELETE: { u32 k = w[0], n = w[1]; for (u32 i = 0; i < n; i++) { u32 id = w[2 + i]; if (id < IDMAX && idmap[id]) { del1(k, idmap[id]); idmap[id] = 0; } } break; }
-    case OP_CREATE_SHADER: idmap[w[0]] = glCreateShader(w[1]); if (w[0] < IDMAX / 4) stype[w[0]] = (w[1] == GL_VERTEX_SHADER); break;
-    case OP_CREATE_PROGRAM: idmap[w[0]] = glCreateProgram(); break;
-    case OP_DELETE_SHADER: glDeleteShader(M(w[0])); idmap[w[0]] = 0; break;
-    case OP_DELETE_PROGRAM: glDeleteProgram(M(w[0])); idmap[w[0]] = 0; break;
+    case OP_CREATE_SHADER: if (w[0] >= IDMAX) break; idmap[w[0]] = glCreateShader(w[1]); if (w[0] < IDMAX / 4) stype[w[0]] = (w[1] == GL_VERTEX_SHADER); break;
+    case OP_CREATE_PROGRAM: if (w[0] < IDMAX) idmap[w[0]] = glCreateProgram(); break;
+    case OP_DELETE_SHADER: if (w[0] < IDMAX) { glDeleteShader(M(w[0])); idmap[w[0]] = 0; } break;
+    case OP_DELETE_PROGRAM: if (w[0] < IDMAX) { glDeleteProgram(M(w[0])); idmap[w[0]] = 0; } break;
     case OP_SIMPLE: { u64 a[16]; u32 n = w[1]; for (u32 i = 0; i < n && i < 16; i++) memcpy(&a[i], buf + 8 + 8 * i, 8); do_simple(w[0], a, n); break; }
     case OP_SHADER_SOURCE: { char *s = xlat_shader((char *)(buf + 8), w[1], w[0] < IDMAX / 4 ? stype[w[0]] : 0); const char *sp = s; glShaderSource(M(w[0]), 1, &sp, NULL); if (verbose) fprintf(stderr, "---- shader %u\n%s\n", w[0], s); free(s); break; }
     case OP_BUFFER_DATA: { i64 sz; memcpy(&sz, buf + 4, 8); glBufferData(w[0], sz, w[4] ? buf + 20 : NULL, w[3]); break; }
@@ -385,7 +398,11 @@ int main(int argc, char **argv) {
     case OP_GET_ATTRIB_LOC: { char t[256]; u32 l = w[1] < 255 ? w[1] : 255; memcpy(t, buf + 8, l); t[l] = 0; rep32(glGetAttribLocation(M(w[0]), t)); break; }
     case OP_GET_UNIFORM_LOC: { char t[256]; u32 l = w[1] < 255 ? w[1] : 255; memcpy(t, buf + 8, l); t[l] = 0; rep32(glGetUniformLocation(M(w[0]), t)); break; }
     case OP_CHECK_FB: rep32(glCheckFramebufferStatus(w[0])); break;
-    case OP_READ_PIXELS: { int pw = w[2], ph = w[3]; u32 n = pw * 4 * ph; u8 *t = malloc(n); glPixelStorei(GL_PACK_ALIGNMENT, 4); glReadPixels(w[0], w[1], pw, ph, w[4], w[5], t); rep32(n); wrn(t, n); free(t); break; }
+    case OP_READ_PIXELS: {          // só RGBA/UNSIGNED_BYTE com empacotamento padrão: o tamanho do buffer é o que o GL vai escrever
+      u32 pw = w[2], ph = w[3]; if (pw > 8192 || ph > 8192 || w[4] != GL_RGBA || w[5] != GL_UNSIGNED_BYTE) { rep32(0); break; }
+      u32 n = pw * 4 * ph; u8 *t = calloc(1, n ? n : 1);
+      glPixelStorei(GL_PACK_ALIGNMENT, 4); glPixelStorei(GL_PACK_ROW_LENGTH, 0); glPixelStorei(GL_PACK_SKIP_ROWS, 0); glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+      glReadPixels(w[0], w[1], pw, ph, w[4], w[5], t); rep32(n); wrn(t, n); free(t); break; }
     case OP_FINISH: glFinish(); rep32(1); break;
     default: if (op < 64 && !unknown_ops[op]++) fprintf(stderr, "glhost7: op %u desconhecida\n", op);
     }

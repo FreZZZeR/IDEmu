@@ -170,7 +170,7 @@
         const rel = (r.path ? r.path + '/' : '') + e.name;
         const row = h('div', { class: 'sf-row' + (e.dir ? ' dir' : ''), role: 'listitem' },
           ic(e.dir ? 'folder' : e.link != null ? 'link' : 'file', 16),
-          e.dir ? h('button', { class: 'link sf-n', type: 'button', onclick: () => load(rel) }, e.name) : h('span', { class: 'sf-n mono' }, e.name, e.link != null ? h('span', { class: 'muted' }, ' → ' + e.link) : null),
+          e.dir ? h('button', { class: 'link sf-n', type: 'button', onclick: () => load(rel) }, IDE.raw(e.name)) : h('span', { class: 'sf-n mono' }, e.name, e.link != null ? h('span', { class: 'muted' }, ' → ' + e.link) : null),
           h('span', { class: 'muted small mono' }, e.dir || e.link != null ? '' : IDE.fmtSize(e.size)),
           h('span', { class: 'sf-act' }, e.dir || e.link != null ? null : [
             h('button', { class: 'icon-btn', type: 'button', title: IDE.t('Ver'), 'aria-label': IDE.t('Ver'), onclick: () => view(rel, e) }, ic('expand', 14)),

@@ -21,7 +21,9 @@ SERVICES = [('random', '', 1), ('mqueue', '', 1), ('io-pkt-v6-hc', '', 0), ('sys
 READY = {'random': '/dev/random', 'io-pkt-v6-hc': '/dev/socket', 'dev-sysregs2': '/dev/sysregs', 'io-ipc': '/dev/ipc/ipc26',
          'watchdog5-omap': '/dev/hbwatchdog', 'servicebroker': '/srv/servicebroker'}
 # start_net.sh do SWFL sem o que depende da Ethernet real (dwc0 não existe na VM): `if_up -r 10` + `waitfor /net/hu-jacinto... 3` só gastavam 17 s para falhar
-SDA_SECTORS, SDB_SECTORS, SHIM_SECTORS = 983040, 2064384, 65536
+# shim: 15 MB em 0x7f000000-0x7ff00000. Os primeiros 16 MB da janela de 32 MB do QEMU (0x7e000000) são o buffer da ponte GL, e 0x7ff00000 os registradores dela:
+# com o shim ali, os comandos GL sobrescreviam o sistema de arquivos depois do boot (arquivos lidos tarde chegavam corrompidos)
+SDA_SECTORS, SDB_SECTORS, SHIM_SECTORS = 983040, 2064384, 30720
 
 ROLE_TOKEN = b'MOSTSrvSystem'      # nome-base do papel servidor (13 bytes, o mesmo tamanho de "MOSTSubSystem")
 

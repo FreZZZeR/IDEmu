@@ -172,7 +172,7 @@
       const stepsEl = h('ol', { class: 'cod-steps' });
       const msg = h('div');
       let closeOk = false;
-      const m = IDE.modal({ title: t('Flashing'), size: 'md', persistent: true, body: h('div', null, stepsEl, msg), onClose: () => { closeOk = true; } });
+      const m = IDE.modal({ title: t('Flashing'), size: 'md', locked: true, body: h('div', null, stepsEl, msg), onClose: () => { closeOk = true; } });
       const stop = IDE.loop(async () => {
         const j = await api('/api/env/' + eid + '/coding/flash');
         if (closeOk || !document.body.contains(m.el)) { stop(); return; }      // diálogo fechado ou tela trocada

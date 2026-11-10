@@ -105,7 +105,7 @@ class MguRuntime(runtime.Runtime):
             p = os.path.join(self.logd, 'console.log'); off, n, tail = getattr(self, '_exits', (0, 0, b''))
             if os.path.getsize(p) < off: off, n, tail = 0, 0, b''
             with open(p, 'rb') as f: f.seek(off); d = tail + f.read(); off = f.tell()
-            n += d.count(b'IDEMU-HMI-EXIT'); self._exits = (off, n, d[-15:] if not d.endswith(b'IDEMU-HMI-EXIT') else b'')
+            n += d.count(b'IDEMU-HMI-EXIT'); self._exits = (off, n, d[-13:])     # 13 = len(marcador) - 1: guarda um marcador partido ao meio, nunca um inteiro (seria contado de novo)
             return n
         except OSError: return 0
     def _mark(self, name): self.marks[name] = round(time.time() - self.t0, 1)
@@ -129,12 +129,15 @@ class MguRuntime(runtime.Runtime):
             env = dict(os.environ, DYLD_INSERT_LIBRARIES=OUT + '/guest/qemushm.dylib', IDEMU_SHM_NAME=SHM)
             self._spawn('q', cmd, stdin=self._keep, stdout=sl, stderr=subprocess.STDOUT, env=env)
             self.step = 'Iniciando o sistema do carro'; self.pct = 15
-            time.sleep(2)
-            _posixshmem.shm_unlink(SHM)   # QEMU e mguhost já abriram: a memória some junto com eles
-            end = time.time() + 300
+            end = time.time() + 300; unlinked = False
+            # o nome do shm sai quando o primeiro quadro prova que QEMU e mguhost já o abriram (antes: 2 s fixos, e um QEMU lento não achava o objeto)
             while not self.stop_ev.is_set():
                 if self.q.poll() is not None: raise RuntimeError('o QEMU terminou (%s); veja logs/console.log' % self.q.returncode)
                 if self.gl.poll() is not None: raise RuntimeError('o renderizador terminou (%s); veja logs/renderer.log' % self.gl.returncode)
+                if not unlinked and self.frame_seq() >= 1:
+                    unlinked = True
+                    try: _posixshmem.shm_unlink(SHM)       # a memória some junto com os dois processos
+                    except OSError: pass
                 if self.state == 'booting':
                     el = time.time() - self.t0
                     self.pct = min(95, 15 + int(el * 1.6)); self.step = 'Iniciando o HMI do iDrive 8'
@@ -146,6 +149,9 @@ class MguRuntime(runtime.Runtime):
                 time.sleep(0.25)
         except Exception as e:
             if not self.stop_ev.is_set(): self.err = str(e); self.state = 'error'; self._kill_children()
+            else:                                  # parado durante o preparo: _prepare_ram pode ter criado o shm depois do _kill_children (GBs de RAM presos)
+                try: _posixshmem.shm_unlink(SHM)
+                except OSError: pass
     def _kill_children(self):
         runtime.Runtime._kill_children(self)
         if self._keep is not None:
@@ -165,7 +171,8 @@ class MguRuntime(runtime.Runtime):
             if self._sock is None:
                 import socket
                 self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-            self._sock.sendto(line.encode(), os.path.join(self.run, 'input.sock'))
+            try: self._sock.sendto(line.encode(), os.path.join(self.run, 'input.sock'))
+            except OSError as e: print('iDrive 8: entrada não entregue (%s)' % e)   # mguhost reiniciando ou fila cheia: não derruba a VM em execução
     def key(self, code, val): self.send_cmd('k %d %d 0 1' % (code, 1 if val else 0))
     def rotor(self, delta):
         if delta: self.send_cmd('r %d' % delta)

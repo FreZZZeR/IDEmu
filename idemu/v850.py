@@ -54,8 +54,10 @@ class V850Link(object):
     # --- log --------------------------------------------------------------
     def log(self, txt):
         line = '%8.2f %s' % (time.time() - self.t0, txt)
-        if self._logf:
-            self._logf.write(line + '\n')
+        f = self._logf
+        if f:
+            try: f.write(line + '\n')
+            except ValueError: return          # fechado por stop() em outro thread
             self._log_bytes += len(line) + 1
             if self._log_bytes > self.LOG_MAX:          # o log chegava a centenas de MB: guarda só o trecho mais recente
                 self._logf.close()
@@ -112,10 +114,18 @@ class V850Link(object):
     def stop(self):
         self.alive = False
         try:
+            self.bridge.stop()             # threads most-car (4 Hz) e most-tx: antes sobravam a cada parada/partida do ambiente
+        except Exception:
+            pass
+        try:
             if self.sock:
                 self.sock.close()
         except Exception:
             pass
+        f, self._logf = self._logf, None
+        if f:
+            try: f.close()
+            except Exception: pass
 
     def _connect(self):
         t_end = time.time() + 120

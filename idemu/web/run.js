@@ -250,7 +250,10 @@
     function onKeyDown(e) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (IDE.isTyping(e.target) || document.querySelector('.backdrop')) return;
-      const k = e.key, onBtn = e.target && /^(BUTTON|A)$/.test(e.target.tagName) && e.target.matches(':focus-visible');
+      // teclas num controle focado pelo teclado (abas, <summary> dos grupos do CAN, links) são dele, não do controlador iDrive
+      const tgt = e.target, ctl = tgt && tgt !== document.body && tgt.matches && tgt.matches('button, a, summary, [role="tab"], [tabindex]:not([tabindex="-1"])');
+      if (ctl && tgt.matches(':focus-visible') && tgt.closest('.tabs-card, .run-bar, .card-title')) return;     // depois de um clique com o mouse as setas continuam girando o rotor
+      const k = e.key, onBtn = ctl && tgt.matches(':focus-visible');
       if (k === 'ArrowLeft' || k === 'ArrowRight') {
         e.preventDefault();
         if (e.shiftKey) tilt(k === 'ArrowLeft' ? 'left' : 'right'); else rotorStep(k === 'ArrowLeft' ? -1 : 1);
@@ -278,9 +281,9 @@
     /* ---------- abas ---------- */
     const TABS = [['can', 'CAN', 'activity'], ['cluster', 'Cluster e HUD', 'gauge'], ['gps', 'GPS', 'pin'], ['map', 'Mapa', 'pin'], ['ssh', 'SSH', 'terminal'], ['phone', 'Celular', 'phone'], ['v850', 'V850', 'activity'], ['logs', 'Logs', 'file']];
     const ctx = { status: () => R.status, running: () => !!(R.status && R.status.state === 'running'), booted: () => !!(R.status && (R.status.state === 'running' || R.status.state === 'booting')) };
-    function selectTab(id) {
+    function selectTab(id, persist = true) {
       if (R.activeTab && R.tabs[R.activeTab]) { R.tabs[R.activeTab].api.hide(); R.tabs[R.activeTab].host.hidden = true; }
-      R.activeTab = id; IDE.pref.set('run.tab', id);
+      R.activeTab = id; if (persist) IDE.pref.set('run.tab', id);      // a troca forçada (iDrive 4/7/8 só têm Logs) não apaga a aba preferida
       let t = R.tabs[id];
       if (!t) { const host = h('div', { class: 'tab-host' }); tabBody.appendChild(host); t = R.tabs[id] = { host, api: IDE.tabDefs[id].mount(host, ctx) }; }
       t.host.hidden = false; t.api.show(); if (R.status && t.api.onStatus) t.api.onStatus(R.status);
@@ -322,12 +325,12 @@
       if (s.kind === 'cic' && img.width) dispSize.textContent = IDE.t('{w} × {h} · sem tela de toque (use o controlador)', { w: img.width, h: img.height });      // o iDrive 7 tem o editor de codificação
       bootNote.textContent = IDE.t(s.kind === 'cic' ? 'O boot do iDrive 4 leva cerca de 1 minuto (emulação SH-4 sem aceleração).' : s.kind === 'mgu7' ? 'O primeiro boot do iDrive 7 leva cerca de 2 minutos (emulação x86 sem aceleração); os seguintes, cerca de 1 segundo.' : mgu ? 'O boot do iDrive 8 leva cerca de 1 minuto.' : 'O primeiro boot leva cerca de 45 segundos; os seguintes, cerca de 1 segundo.') + ' ';
       tabBar.querySelectorAll('button').forEach((b) => { b.style.display = mgu && b.dataset.tab !== 'logs' && b.dataset.tab !== 'phone' ? 'none' : ''; });
-      if (mgu && R.activeTab !== 'logs' && R.activeTab !== 'phone') selectTab('logs');
+      if (mgu && R.activeTab !== 'logs' && R.activeTab !== 'phone') selectTab('logs', false);
       const env = s.env ? IDE.envById(s.env) : null;
       const envSig = env ? env.id + '|' + env.name + '|' + env.chassis : String(s.env);
       if (barEnv.dataset.sig !== envSig) {           // o status chega 4 vezes por segundo no boot: só refaz o cabeçalho quando o ambiente muda
         barEnv.dataset.sig = envSig; IDE.clear(barEnv);
-        IDE.add(barEnv, ic('car', 20), h('span', null, env ? env.name : (s.env || 'Nenhum ambiente')), env ? h('span', { class: 'muted small' }, [env.chassis, IDE.brandName(env.brand)].join(' · ')) : null);
+        IDE.add(barEnv, ic('car', 20), h('span', null, env ? IDE.raw(env.name) : (s.env || 'Nenhum ambiente')), env ? h('span', { class: 'muted small' }, IDE.raw([env.chassis, IDE.brandName(env.brand)].join(' · '))) : null);
       }
       const [t, k] = STATE_TXT[s.state] || [s.state, 'muted'];
       barState.className = 'badge ' + k; barState.textContent = IDE.t(t);

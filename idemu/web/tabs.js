@@ -165,9 +165,11 @@
         let stop = null, active = null;
         const box = h('div', { class: 'scn-list' });
         IDE.add(el, h('p', { class: 'help' }, 'Cenários geram sinais de CAN automaticamente (velocidade, rotação, marcha…). Só um fica ativo por vez.'), box);
+        let lastSig = null;
         async function load() {
           const d = await api('/api/can/scenarios');
           active = d.active || null;
+          const sig = JSON.stringify(d); if (sig === lastSig) return; lastSig = sig;     // só refaz os botões quando a lista muda
           IDE.clear(box);
           (d.scenarios || []).forEach((sc) => {
             const on = active === sc.id;
@@ -188,6 +190,11 @@
         const recBtn = h('button', { class: 'btn', type: 'button' });
         const list = h('div', { class: 'rec-list' });
         const loopCb = h('input', { type: 'checkbox' });
+        // a reprodução (sobretudo com "repetir") pausa o gerador cíclico: sem este botão só parava reiniciando o ambiente
+        const stopReplay = h('button', { class: 'btn sm danger-o', type: 'button', hidden: true }, ic('stop', 14), 'Parar reprodução');
+        stopReplay.addEventListener('click', () => IDE.busy(stopReplay, async () => {
+          try { await post('/api/can/replay', { file: null }); toast('Reprodução parada.', 'success'); await load(); } catch (e) { toastErr(e); }
+        }));
         function recLabel() { IDE.clear(recBtn); IDE.add(recBtn, ic(recording ? 'stop' : 'record', 14), recording ? 'Parar gravação' : 'Gravar tráfego'); recBtn.classList.toggle('danger-o', recording); }
         recBtn.addEventListener('click', () => IDE.busy(recBtn, async () => {
           try {
@@ -197,18 +204,20 @@
         }));
         async function load() {
           const d = await api('/api/can/recordings');
-          if (d && typeof d.recording === 'boolean') { recording = d.recording; recLabel(); }
+          const sig = JSON.stringify(d); if (sig === load.sig) return; load.sig = sig;
           const arr = Array.isArray(d) ? d : (d.recordings || d.files || []);
+          recording = arr.some((r) => r && r.recording); recLabel();          // o estado real vem do servidor (voltar à tela no meio de uma gravação)
+          stopReplay.hidden = !(d && d.replaying);
           IDE.clear(list);
           if (!arr.length) list.appendChild(h('div', { class: 'placeholder' }, 'Nenhuma gravação ainda.'));
           arr.forEach((r) => {
             const file = typeof r === 'string' ? r : (r.file || r.name);
             const b = h('button', { class: 'btn sm', type: 'button' }, ic('play', 14), 'Reproduzir');
             b.addEventListener('click', () => IDE.busy(b, async () => {
-              try { await post('/api/can/replay', { file, loop: loopCb.checked }); toast(IDE.t('Reproduzindo {file}.', { file }), 'info'); } catch (e) { toastErr(e); }
+              try { await post('/api/can/replay', { file, loop: loopCb.checked }); toast(IDE.t('Reproduzindo {file}.', { file }), 'info'); await load(); } catch (e) { toastErr(e); }
             }));
             list.appendChild(h('div', { class: 'rec-row' }, ic('file', 16), h('div', { class: 'rec-t' }, h('span', { class: 'mono' }, file),
-              typeof r === 'object' ? h('span', { class: 'muted small' }, [r.frames != null ? IDE.t('{n} quadros', { n: r.frames }) : null, r.size != null ? IDE.fmtSize(r.size) : null, r.created ? IDE.fmtDate(r.created) : null].filter(Boolean).join(' · ')) : null), b));
+              typeof r === 'object' ? h('span', { class: 'muted small' }, [r.frames != null ? IDE.t('{n} quadros', { n: r.frames }) : null, r.size != null ? IDE.fmtSize(r.size) : null, r.mtime ? IDE.fmtDate(new Date(r.mtime * 1000).toISOString()) : null].filter(Boolean).join(' · ')) : null), b));
           });
         }
         // injeção de quadro bruto
@@ -232,7 +241,7 @@
         });
         IDE.add(el, 
           h('fieldset', null, h('legend', null, 'Gravação'),
-            h('div', { class: 'row' }, recBtn, h('label', { class: 'check' }, loopCb, h('span', null, 'Repetir ao reproduzir'))), list),
+            h('div', { class: 'row' }, recBtn, h('label', { class: 'check' }, loopCb, h('span', null, 'Repetir ao reproduzir')), stopReplay), list),
           h('fieldset', null, h('legend', null, 'Injetar quadro bruto'),
             h('div', { class: 'inject' },
               h('div', { class: 'field' }, h('label', { class: 'lbl' }, 'ID (hex)'), idIn),
@@ -304,7 +313,7 @@
         for (const k of Object.keys(fields)) {
           if (fields[k].dataset.dirty !== '1') continue;
           const v = fields[k].value;
-          if (v === '' || isNaN(Number(v))) { toast(IDE.t('Valor inválido em "{k}".', { k }), 'error'); return; }
+          if (v === '' || isNaN(Number(v))) { const f = FIELDS.find((x) => x[0] === k); toast(IDE.t('Valor inválido em "{k}".', { k: f ? IDE.t(f[1]) : k }), 'error'); return; }   // nome do campo, não a chave interna (speed_kmh)
           body[k] = k === 'sats' ? parseInt(v, 10) : Number(v);
         }
         if (!Object.keys(body).length) return;
@@ -550,7 +559,8 @@
             h('div', null, h('dt', null, 'Usuário'), h('dd', { class: 'mono' }, d.user)), h('div', null, h('dt', null, 'Chave privada'), h('dd', { class: 'mono wrapany' }, d.key_path || '–'))),
           h('p', { class: 'help' }, 'Cole o comando em um terminal do seu computador. Se o sistema pedir confirmação da chave do host na primeira vez, responda "yes".'));
       }
-      async function load() { render(await api('/api/ssh/info')); }
+      let lastSig = null;
+      async function load() { const d = await api('/api/ssh/info'); const sig = JSON.stringify(d); if (sig !== lastSig) { lastSig = sig; render(d); } }   // a seleção manual do comando não some a cada 3 s
       return { show() { stop = IDE.loop(load, 3000); }, hide() { if (stop) stop(); stop = null; }, destroy() { if (stop) stop(); } };
     },
   };
@@ -580,7 +590,10 @@
           h('div', { class: 'ssh-state ' + (d.phones.length ? 'up' : 'down') }, h('span', { class: 'dot' }), d.phones.length ? IDE.t('{n} celular(es) conectado(s)', { n: d.phones.length }) : 'Nenhum celular conectado ainda'),
           d.gps ? h('p', { class: 'help' }, IDE.t('Última posição do celular: {lat}, {lon} ({kmh} km/h)', { lat: d.gps.lat, lon: d.gps.lon, kmh: d.gps.speed_kmh })) : null);
       }
-      async function load() { try { render(await api('/api/phone')); } catch (e) { /* servidor reiniciando */ } }
+      let lastSig = null;
+      async function load() {
+        try { const d = await api('/api/phone'); const sig = JSON.stringify([d, busy]); if (sig !== lastSig) { lastSig = sig; render(d); } } catch (e) { /* servidor reiniciando */ }
+      }
       return { show() { stop = IDE.loop(load, 3000); }, hide() { if (stop) stop(); stop = null; }, destroy() { if (stop) stop(); } };
     },
   };

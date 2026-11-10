@@ -24,6 +24,12 @@ class ShimStaleTest(unittest.TestCase):
         os.utime(p, (self.newest - 60, self.newest - 60))
         self.assertTrue(self.app._shim_stale('nbt'))
 
+    def test_shim_de_32mb_e_refeito(self):
+        p = os.path.join(self.img, 'shim.img')
+        with open(p, 'wb') as f: f.truncate(32 << 20)                     # layout antigo (0x7e000000, sob o buffer da ponte GL)
+        t = time.time() + 60; os.utime(p, (t, t))
+        self.assertTrue(self.app._shim_stale('nbt'))
+
     def test_shim_em_dia(self):
         p = os.path.join(self.img, 'shim.img'); open(p, 'wb').write(b'x')
         t = time.time() + 60; os.utime(p, (t, t))

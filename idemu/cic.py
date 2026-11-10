@@ -156,6 +156,13 @@ class CicRuntime(runtime.Runtime):
             if not self.stop_ev.is_set():
                 self.err = str(e); self.state = 'error'; self._kill_children()
 
+    def _kill_children(self):
+        runtime.Runtime._kill_children(self)
+        if self.zbe: self.zbe.close(); self.zbe = None         # socket output.sock e thread rx: o servidor cria um CicRuntime novo a cada partida
+        if self._sock is not None:
+            try: self._sock.close()
+            except OSError: pass
+            self._sock = None
     def status(self):
         s = runtime.Runtime.status(self); s['kind'] = self.kind; s['disp'] = list(self.disp)
         return s

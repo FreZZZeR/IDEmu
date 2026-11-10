@@ -17,6 +17,7 @@ HTTP_PORT, HTTPS_PORT = 8766, 8767
 COOKIE = 'idemu_phone'
 MAX_FAILS, LOCK_S = 5, 60
 MAX_BODY = 4096
+SESSION_S = 12 * 3600        # validade da sessão (igual ao Max-Age do cookie)
 
 
 def lan_ips():
@@ -75,7 +76,7 @@ class PhoneLink(object):
                 crt, key = make_cert(lan_ips())
                 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain(crt, key)
                 hs = ThreadingHTTPServer(('0.0.0.0', self.https_port), handler); hs.daemon_threads = True; self.https_port = hs.server_address[1]
-                hs.socket = ctx.wrap_socket(hs.socket, server_side=True)
+                hs.socket = ctx.wrap_socket(hs.socket, server_side=True, do_handshake_on_connect=False)   # o handshake vai para o thread da conexão (H.setup): um cliente parado não trava o accept
                 self.servers.append(hs); threading.Thread(target=hs.serve_forever, daemon=True).start(); self.https_ok = True
             except (OSError, RuntimeError, ssl.SSLError) as e:
                 self.error = 'HTTPS indisponível (%s): a localização do celular não funciona, o controle sim' % e
@@ -87,7 +88,7 @@ class PhoneLink(object):
             for s in self.servers:
                 try: s.shutdown(); s.server_close()
                 except OSError: pass
-            self.servers = []; self.running = False; self.sessions = {}
+            self.servers = []; self.running = False; self.sessions = {}; self.pin = ''   # conexões keep-alive ainda abertas não conseguem mais entrar
         return self.state()
 
     def state(self):
@@ -96,7 +97,7 @@ class PhoneLink(object):
         return {'running': self.running, 'pin': self.pin if self.running else '', 'ips': ips, 'http_port': self.http_port, 'https_port': self.https_port,
                 'https': self.https_ok, 'error': self.error,
                 'urls': ['http://%s:%d/' % (a, self.http_port) for a in ips], 'urls_https': ['https://%s:%d/' % (a, self.https_port) for a in ips] if self.https_ok else [],
-                'phones': sorted(ip for ip, t in self.clients.items() if now - t < 15), 'gps_fixes': self.gps_fixes, 'gps': self.last_gps}
+                'phones': sorted(ip for ip, t in list(self.clients.items()) if now - t < 15), 'gps_fixes': self.gps_fixes, 'gps': self.last_gps}
 
     # ---------- autenticação ----------
     def _locked(self, ip):
@@ -104,16 +105,18 @@ class PhoneLink(object):
         return n >= MAX_FAILS and time.time() - t < LOCK_S
 
     def login(self, ip, pin):
-        if self._locked(ip): return None
-        if hmac.compare_digest(str(pin or '').strip().encode(), self.pin.encode()):
-            self.fails.pop(ip, None); tok = secrets.token_urlsafe(24); self.sessions[tok] = time.time(); return tok
-        n, _ = self.fails.get(ip, (0, 0)); self.fails[ip] = (n + 1, time.time()); return None
+        with self.lock:      # verificação, comparação e contagem juntas: pedidos em paralelo não ganham tentativas extras
+            if not self.running or not self.pin or self._locked(ip): return None
+            if hmac.compare_digest(str(pin or '').strip().encode(), self.pin.encode()):
+                self.fails.pop(ip, None); tok = secrets.token_urlsafe(24); self.sessions[tok] = time.time(); return tok
+            n, _ = self.fails.get(ip, (0, 0)); self.fails[ip] = (n + 1, time.time()); return None
 
     def authed(self, cookie_header):
         try: c = http.cookies.SimpleCookie(cookie_header or '')
         except http.cookies.CookieError: return False
         m = c.get(COOKIE)
-        return bool(m and m.value in self.sessions)
+        t = self.sessions.get(m.value) if m and self.running else None
+        return t is not None and time.time() - t < SESSION_S
 
     # ---------- ações ----------
     def do_input(self, d):
@@ -158,6 +161,11 @@ class PhoneLink(object):
         class H(BaseHTTPRequestHandler):
             protocol_version = 'HTTP/1.1'
             server_version = 'IDEmuPhone'
+            timeout = 30          # conexão parada (keep-alive ocioso, cliente lento) não segura um thread para sempre
+            def setup(self):
+                if isinstance(self.request, ssl.SSLSocket):
+                    self.request.settimeout(10); self.request.do_handshake()     # erro aqui só encerra esta conexão
+                super().setup()
             def log_message(self, *a): pass
             def _ip(self): return self.client_address[0]
             def _send(self, code, body=b'', ctype='application/json', extra=None):
@@ -169,7 +177,7 @@ class PhoneLink(object):
                 self.end_headers(); self.wfile.write(body)
             def _body(self):
                 n = int(self.headers.get('Content-Length') or 0)
-                if n > MAX_BODY: raise ValueError('corpo grande demais')
+                if n < 0 or n > MAX_BODY: raise ValueError('corpo grande demais')     # -1 faria o read() ler até o fim da conexão
                 return json.loads(self.rfile.read(n) or b'{}') if n else {}
             def _cookie(self, tok): return {'Set-Cookie': '%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200' % (COOKIE, tok)}
             def do_GET(self):

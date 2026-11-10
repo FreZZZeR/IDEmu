@@ -162,18 +162,23 @@ def verify_nmea(line):
     return nmea_checksum(body) == ck.upper()
 
 
+def _dm(a):
+    """Graus e minutos (5 casas) de um ângulo positivo, arredondando antes de separar: 46,99999999 dava "4660.00000" (60 minutos)."""
+    m = round(a * 60.0, 5)
+    d = int(m // 60)
+    return d, m - d * 60
+
+
 def _lat_nmea(lat):
     h = "N" if lat >= 0 else "S"
-    a = abs(lat)
-    d = int(a)
-    return "%02d%08.5f" % (d, (a - d) * 60.0), h
+    d, m = _dm(abs(lat))
+    return "%02d%08.5f" % (d, m), h
 
 
 def _lon_nmea(lon):
     h = "E" if lon >= 0 else "W"
-    a = abs(lon)
-    d = int(a)
-    return "%03d%08.5f" % (d, (a - d) * 60.0), h
+    d, m = _dm(abs(lon))
+    return "%03d%08.5f" % (d, m), h
 
 
 def _fletcher(payload):
@@ -380,7 +385,7 @@ class GpsSim(object):
 
     def _build_nmea(self):
         t_unix = self._clock()
-        dt = datetime.datetime.utcfromtimestamp(t_unix)
+        dt = datetime.datetime.utcfromtimestamp(round(t_unix, 2))      # arredonda antes: 59,996 s viravam "60.00"
         hhmmss = "%02d%02d%05.2f" % (dt.hour, dt.minute, dt.second + dt.microsecond / 1e6)
         date = "%02d%02d%02d" % (dt.day, dt.month, dt.year % 100)
         lat_s, ns = _lat_nmea(self.lat)

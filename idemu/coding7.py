@@ -37,6 +37,7 @@ def load():
         with open(p) as f:
             d = json.load(f)
         areas = {a['id'] & 0xff: a for a in d['areas']}
+        _cache.clear()                     # os campos ('fields', layout) vêm do arquivo anterior: posições e máscaras velhas gravariam nos bytes errados
         _cache.update(m=m, d=d, areas=areas)
     return _cache['d'], _cache['areas']
 

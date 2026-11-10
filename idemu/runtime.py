@@ -74,8 +74,12 @@ class ShellMux:
                     except OSError: self.clients.remove(c)
     def close(self):
         self.stop = True
-        try: self.srv.close()
-        except Exception: pass
+        socks = [getattr(self, 'srv', None), getattr(self, 'u', None)]
+        with self.lock: socks += self.clients; self.clients = []
+        for s in socks:                    # também a UART e os clientes: as sessões SSH abertas terminam em vez de ficarem penduradas
+            try:
+                if s: s.close()
+            except Exception: pass
 
 class Qmp:
     """Cliente mínimo do QMP (monitor do QEMU)."""
@@ -90,8 +94,9 @@ class Qmp:
                 if 'error' in r: raise RuntimeError('QMP %s: %s' % (name, r['error'].get('desc')))
                 if 'return' in r: return r['return']
     def close(self):
-        try: self.s.close()
-        except OSError: pass
+        for o in (self.f, self.s):
+            try: o.close()
+            except OSError: pass
 
 SNAP_FORMAT = 2
 
@@ -159,6 +164,12 @@ class Runtime:
     def _log(self, name):
         return open(os.path.join(self.logd, name), 'w')
 
+    def _shim_addr(self):
+        """(endereço, setores) do disco de shim: 0x7f000000 nos shims de 15 MB (fora do buffer da ponte GL); os de 32 MB, de antes, ficam em 0x7e000000."""
+        try: n = os.path.getsize(os.path.join(self.img, 'shim.img')) // 512
+        except OSError: n = 0
+        return (0x7f000000, n) if 0 < n <= 30720 else (0x7e000000, 65536)
+
     def _launch(self, resume=False, record=False):
         """Sobe renderizador e QEMU; devolve os caminhos dos sockets seriais."""
         B = BIN + '/'; R = self.run + '/'
@@ -190,7 +201,7 @@ class Runtime:
                      '-device', 'loader,addr=0xbff00000,cpu-num=0',
                      '-device', 'loader,file=%ssda.img,addr=0x60000000' % I,
                      '-device', 'loader,file=%ssdb.img,addr=0x01000000' % I,
-                     '-device', 'loader,file=%sshim.img,addr=0x7e000000' % I]
+                     '-device', 'loader,file=%sshim.img,addr=%#x' % (I, self._shim_addr()[0])]
         args += shlex.split(os.environ.get('IDEMU_QEMU_EXTRA', ''))
         self.step = 'Iniciando QEMU'; self.pct = 5
         self._spawn('q', args, env=env, stdout=self._log('qemu.log'), stderr=subprocess.STDOUT)
@@ -202,7 +213,9 @@ class Runtime:
         try:
             if self.fast_boot_enabled() and not self.want_cold and self.snapshot_valid():
                 try:
-                    self._boot_resume(); return
+                    self._boot_resume()
+                    if self.state == 'error' and not self.stop_ev.is_set(): self._kill_children()      # caiu depois do boot rápido: não deixa QEMU/renderizador/portas para trás
+                    return
                 except Exception as e:
                     if self.stop_ev.is_set(): return
                     self.con.append('[idemu] boot rápido falhou (%s: %s); fazendo boot completo' % (type(e).__name__, e))
@@ -243,6 +256,7 @@ class Runtime:
         self.qmp.cmd('cont'); self._mark('resumed'); self.pct = 85
         self.step = 'Verificando o sistema'
         if not self._guest_alive(15): raise RuntimeError('o guest não respondeu depois de restaurado')
+        if self.stop_ev.is_set(): return          # parado durante a verificação: não volta a marcar "em execução"
         self.state = 'running'; self.pct = 100; self.step = 'Em execução'; self._mark('running')
         while not self.stop_ev.is_set() and not self._dead():
             self._drain(1.0)
@@ -266,6 +280,7 @@ class Runtime:
     def _boot_cold(self):
         record = self.fast_boot_enabled()
         self.boot_kind = 'cold'
+        self._boot_key = self.snapshot_key() if record else None    # chave das imagens que este boot usa: um shim refeito durante o boot (recodificação) não pode herdar o snapshot
         ser, ser2, ser1 = self._launch(record=record)
         threading.Thread(target=self._profile, daemon=True).start()
         self._start_services(ser2, ser1)
@@ -283,7 +298,7 @@ class Runtime:
         seq = [('export PATH=/bin:/boot/bin LD_LIBRARY_PATH=/boot/lib:/lib', 10, 'Preparando discos', 12),
                ('devb-ram disk name=sda ram address=0x60000000,capacity=983040,nodinit blk cache=32m', 10, None, 14),
                ('devb-ram disk name=sdb ram address=0x01000000,capacity=2064384,nodinit blk cache=32m', 10, None, 16),
-               ('devb-ram disk name=sdc ram address=0x7e000000,capacity=65536,nodinit blk cache=1m', 10, None, 18),
+               ('devb-ram disk name=sdc ram address=%#x,capacity=%d,nodinit blk cache=1m' % self._shim_addr(), 10, None, 18),
                ('waitfor /dev/sda0t77 20; waitfor /dev/sdb0 20; waitfor /dev/sdc0t77 20', 60, None, 20),
                ('mount -t qnx4 /dev/sda0t77 /fs/sda0', 30, 'Montando sistema de arquivos', 22),
                ('mount -t qnx6 -r /dev/sdb0 /fs/sdb0', 30, None, 24),
@@ -366,7 +381,7 @@ class Runtime:
                 time.sleep(0.02)
             with open(S + 'host.json', 'w') as f: json.dump(host, f)
             os.replace(S + 'vm.bin.tmp', S + 'vm.bin'); os.replace(S + 'gl.rec.tmp', S + 'gl.rec')
-            with open(S + 'key.json.tmp', 'w') as f: json.dump({'key': self.snapshot_key(), 'created': time.time()}, f)
+            with open(S + 'key.json.tmp', 'w') as f: json.dump({'key': getattr(self, '_boot_key', None) or self.snapshot_key(), 'created': time.time()}, f)
             os.replace(S + 'key.json.tmp', S + 'key.json')          # por último: só vale se tudo acima foi gravado
             self._mark('snapshot')
         finally:
@@ -495,6 +510,12 @@ class Runtime:
             except Exception: pass
         self.v850 = self.data = self.map = None; self.ssh = self.gps = self.can = self.mux = None
         if self.qmp: self.qmp.close(); self.qmp = None
+        for a in ('cons', 'conlog', '_insock'):              # console, log do console e socket de entrada: um a menos a cada parada/partida
+            o = getattr(self, a, None)
+            if o is not None:
+                try: o.close()
+                except Exception: pass
+                setattr(self, a, None)
         for p in (self.q, self.gl):
             try:
                 if p: p.terminate()
@@ -523,12 +544,18 @@ class Runtime:
 
     # ---------- quadro de vídeo ----------
     def _map(self):
-        if self._fm is None:
+        # o renderizador pode recriar ou aumentar o arquivo (superfície nova): mapeia de novo quando o inode ou o tamanho mudam, em vez de ler um mapeamento velho
+        try: st = os.stat(self.frame_path); key = (st.st_ino, st.st_size)
+        except OSError: return self._fm
+        if self._fm is None or getattr(self, '_fm_key', None) != key:
             try:
-                f = open(self.frame_path, 'rb')
-                self._fm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                with open(self.frame_path, 'rb') as f: fm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
             except Exception:
-                return None
+                return self._fm if self._fm is not None and len(self._fm) <= st.st_size else None
+            old, self._fm, self._fm_key = self._fm, fm, key
+            if old is not None:
+                try: old.close()
+                except Exception: pass
         return self._fm
 
     def frame_seq(self):
@@ -546,19 +573,21 @@ class Runtime:
         """(seq, largura, altura, bytes RGB) do quadro atual. O renderizador escreve por cima: recopia se o quadro mudou durante a cópia."""
         m = self._map()
         if not m or len(m) < 32: return None
-        for _ in range(3):
-            magic, seq, w, h = struct.unpack_from('<IIII', m, 0)
-            if magic != 0x52464449 or not seq: return None
+        for _ in range(6):
+            magic, seq, w, h, busy = struct.unpack_from('<IIIII', m, 0)       # busy = quadro em escrita (glhost novo); 0 nos binários antigos
+            if magic != 0x52464449 or not seq or len(m) < 32 + w * h * 3: return None
+            if busy and busy != seq: time.sleep(0.002); continue
             raw = bytes(m[32:32 + w * h * 3])
-            if struct.unpack_from('<I', m, 4)[0] == seq: break
+            if struct.unpack_from('<II', m, 4) == (seq, w) and struct.unpack_from('<I', m, 16)[0] == busy: break    # nada recomeçou durante a cópia
         return seq, w, h, raw
 
     def screen_png(self):
         m = self._map(); seq = self.frame_seq()
         if not m or not seq: return None, 0
         if self._png[0] == seq: return self._png[1], seq
-        magic, s0, w, h = struct.unpack_from('<IIII', m, 0)
-        raw = bytes(m[32:32 + w * h * 3])
+        fr = self.frame_bytes()
+        if not fr: return None, 0
+        seq, w, h, raw = fr
         rows = b''.join(b'\0' + raw[y * w * 3:(y + 1) * w * 3] for y in range(h))
         def ch(t, d): c = struct.pack('>I', len(d)) + t + d; return c + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
         png = b'\x89PNG\r\n\x1a\n' + ch(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + ch(b'IDAT', zlib.compress(rows, 1)) + ch(b'IEND', b'')

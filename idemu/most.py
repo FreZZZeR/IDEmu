@@ -287,13 +287,24 @@ class MostBridge(object):
             self._pending[key] = frame
             self._cv.notify()
 
+    def stop(self):
+        """Encerra os threads da ponte (most-car e most-tx) quando o ambiente para."""
+        self._closed = True
+        self.car.stop()
+        cv = getattr(self, '_cv', None)
+        if cv is not None:
+            with cv:
+                cv.notify_all()
+
     def _pump(self):
         import time
         tokens, last = float(self.BURST), time.time()
-        while True:
+        while not getattr(self, '_closed', False):
             with self._cv:
-                while not self._pending or self._hold:
+                while (not self._pending or self._hold) and not getattr(self, '_closed', False):
                     self._cv.wait()
+                if getattr(self, '_closed', False):
+                    return
             while True:
                 now = time.time()
                 tokens = min(float(self.BURST), tokens + (now - last) * self._rate); last = now
@@ -302,7 +313,7 @@ class MostBridge(object):
                     break
                 time.sleep((1.0 - tokens) / self._rate)
             with self._cv:                                  # só tira da fila na hora de enviar: um Status mais novo ainda substitui este durante a espera do limitador
-                if self._hold:
+                if self._hold or not self._pending:
                     continue
                 _, frame = self._pending.popitem(last=False)
             try:
@@ -440,7 +451,8 @@ class MostCar(object):
         if g is None:
             return None
         fix, lat, lon, alt, hdg, spd, sats, hdop = g
-        ilat = int(round(lat / self.LATLON_LSB)); ilon = int(round(lon / self.LATLON_LSB))
+        ilat = max(-2**31, min(2**31 - 1, int(round(lat / self.LATLON_LSB)))); ilon = max(-2**31, min(2**31 - 1, int(round(lon / self.LATLON_LSB))))   # lon = 180,0 dava 2^31 e quebrava o pack
+        alt = max(-0x8000, min(0x7FFF, alt))
         hdg8 = int(round(hdg % 360.0 * 256 / 360)) & 0xFF      # rumo em u8: 360/256 graus (CNaviSplitscreenPositionView, HmiMain3D 0x127a868)
         if fblock == 0x52 and fkt == 0x243:                  # CPos_Position: u16 | s32 lat | s32 lon | u8 | s16
             return _st.pack('>HiiBh', 0, ilat, ilon, hdg8, max(-0x8000, min(0x7FFF, int(round(spd)))))     # mesmos campos de 0x20b, sem o seletor (semântica dos três últimos por analogia, não confirmada)
@@ -592,7 +604,11 @@ class MostCar(object):
             a = 0.05           # média móvel (constante de ~5 s a 4 Hz)
             self.avg_speed += a * (self._sig('vehicle_speed') - self.avg_speed)
             self.avg_cons += a * (self._sig('fuel_consumption') - self.avg_cons)
-            self.publish_all()           # só manda o que mudou; o limite de 30 msg/s da ponte continua valendo
+            try:
+                self.publish_all()       # só manda o que mudou; o limite de 30 msg/s da ponte continua valendo
+            except Exception as e:       # um valor fora da faixa não pode matar o thread: velocidade, marcha e autonomia parariam sem aviso
+                try: self.bridge.link.log('most-car: %r' % (e,))
+                except Exception: pass
             time.sleep(0.25)             # 4 Hz: velocidade e marcha acompanham o CAN virtual sem o atraso de até 1 s
 
     def publish_all(self):

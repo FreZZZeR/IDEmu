@@ -114,13 +114,18 @@
     const visible = () => { const [a] = win(); return S.data.filter((x) => x.t >= a); };
     const lastS = () => S.data[S.data.length - 1] || {};
 
+    let barSig = null, upEl = null;
+    const upText = () => (S.running ? IDE.t('Ligado há {t}', { t: IDE.fmtDur(lastS().up || 0) }) + (S.static.boot_kind ? ' · ' + S.static.boot_kind : '') : IDE.t('Inicie um ambiente para ver os gráficos ao vivo'));
     function renderBar() {
-      IDE.clear(bar);
       const env = S.env ? IDE.envById(S.env) : null;
+      // refaz os botões só quando algo deles muda; o tempo ligado é atualizado no lugar (refazer a cada segundo engolia cliques e tirava o foco do teclado)
+      const sig = JSON.stringify([env && env.name, S.env, S.running, S.state, S.win, S.paused, IDE.lang && IDE.lang()]);
+      if (sig === barSig && upEl) { upEl.textContent = upText(); return; }
+      barSig = sig; IDE.clear(bar);
       const [bt, bk] = S.running ? (S.state === 'booting' ? ['Iniciando', 'info'] : ['Em execução', 'live']) : ['Parado', 'muted'];
       IDE.add(bar,
         h('div', { class: 'env-ico', style: { width: '38px', height: '38px', 'border-radius': '11px' } }, ic('car', 20)),
-        h('div', { class: 'st-env' }, h('b', null, env ? env.name : (S.env || IDE.t('Nenhum ambiente'))), h('span', null, S.running ? IDE.t('Ligado há {t}', { t: IDE.fmtDur(lastS().up || 0) }) + (S.static.boot_kind ? ' · ' + S.static.boot_kind : '') : IDE.t('Inicie um ambiente para ver os gráficos ao vivo'))),
+        h('div', { class: 'st-env' }, h('b', null, env ? IDE.raw(env.name) : (S.env || IDE.t('Nenhum ambiente'))), (upEl = h('span', null, IDE.raw(upText())))),
         IDE.badge(bt, bk), h('div', { class: 'spacer' }),
         h('div', { class: 'st-win', role: 'group', 'aria-label': 'Janela' }, WINDOWS.map(([sec, label]) => h('button', { type: 'button', class: S.win === sec ? 'on' : '', onclick: () => { S.win = sec; IDE.pref.set('stats.win', sec); renderBar(); draw(); } }, label))),
         h('button', { class: 'btn', type: 'button', onclick: () => { S.paused = !S.paused; renderBar(); } }, ic(S.paused ? 'play' : 'pause', 16), S.paused ? 'Retomar' : 'Pausar'),

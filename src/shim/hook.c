@@ -6,13 +6,30 @@ extern void *dlopen(const char*,int); extern void *dlsym(void*,const char*);
 extern int mprotect(void*,unsigned long,int);
 void *hk_sym(const char*lib,const char*s){ void*h=dlopen(lib,2); return h?dlsym(h,s):0; }
 extern void *mmap(void*,unsigned long,int,int,int,long); extern int *__get_errno_ptr(void);
-/* shared-library text can't be made writable: replace the page(s) by private anonymous copies */
-static int unshare(u32 pg){ static u8 tmp[0x1000]; memcpy(tmp,(void*)pg,0x1000); void*r=mmap((void*)pg,0x1000,0x700,0x80012,-1,0); if((int)r==-1){ br_logx("hook: mmap FAILED",pg,*__get_errno_ptr(),0); return -1; } memcpy((void*)pg,tmp,0x1000); return 0; }
+extern int munmap(void*,unsigned long);
+/* shared-library text can't be made writable: replace the page(s) by private anonymous copies.
+   Each page only once: mapping again would put a zero page under code that other threads may be running (and lose earlier patches).
+   The copy goes through a temporary page of its own, not a static buffer shared between threads. */
+#define MAXPRIV 128
+static u32 priv_pg[MAXPRIV]; static u32 npriv;
+static int unshare(u32 pg){ for(u32 i=0;i<npriv;i++) if(priv_pg[i]==pg) return 0;
+  if(npriv>=MAXPRIV){ br_logx("hook: too many patched pages",pg,0,0); return -1; }
+  u8 *tmp=(u8*)mmap(0,0x1000,0x300,0x80002,-1,0); if((int)tmp==-1){ br_logx("hook: tmp mmap FAILED",pg,*__get_errno_ptr(),0); return -1; }
+  memcpy(tmp,(void*)pg,0x1000);
+  void*r=mmap((void*)pg,0x1000,0x700,0x80012,-1,0); if((int)r==-1){ br_logx("hook: mmap FAILED",pg,*__get_errno_ptr(),0); munmap(tmp,0x1000); return -1; }
+  memcpy((void*)pg,tmp,0x1000); munmap(tmp,0x1000); priv_pg[npriv++]=pg; return 0; }
 int hk_patch(void*target,void*fn){ u32 a=(u32)target&~1u; u32 pg=a&~0xfffu; if(unshare(pg)) return -1; if(((a+7)&~0xfffu)!=pg&&unshare(pg+0x1000)) return -1;
   u32 *p=(u32*)a; p[0]=0xe51ff004; p[1]=(u32)fn; return 0; }
 int hk(const char*lib,const char*s,void*fn){ void*t=hk_sym(lib,s); if(!t){ br_logx(s,0xdead,0,0); return -1; } int r=hk_patch(t,fn); br_logx(s,0x600d,(u32)t,r); return r; }
-/* trampoline: first two instructions (must not be pc-relative) + jump back */
-void *hk_tramp(u32 a,void *fn){ u32 *t=(u32*)mmap(0,4096,0x700,0x80002,-1,0); if((int)t==-1){ br_logx("hook: tramp mmap failed",a,0,0); return 0; } t[0]=((u32*)a)[0]; t[1]=((u32*)a)[1]; t[2]=0xe51ff004; t[3]=a+8; hk_patch((void*)a,fn); return t; }
+/* trampoline: first two instructions + jump back. "ldr rX,[pc,#imm]" (literal pool) is rewritten to load the same value from the
+   trampoline (t[4], t[5]); other pc-relative instructions can't be moved and are only logged. */
+static u32 tramp_ins(u32 a,int i,u32 *t){ u32 ins=((u32*)a)[i];
+  if((ins&0xff7f0000)==0xe51f0000&&((ins>>12)&15)!=15){ u32 imm=ins&0xfff,at=a+4*i+8; t[4+i]=*(u32*)((ins&(1u<<23))?at+imm:at-imm); br_logx("hook: literal relocated",a,i,t[4+i]); return 0xe59f0008|(ins&0xf000); }   /* t+4i+8+8 = &t[4+i] */
+  if(!(ins&0x0c000000)&&(((ins>>16)&15)==15||(!(ins&0x02000000)&&(ins&15)==15))) br_logx("hook: pc-relative prologue, trampoline may be wrong",a,i,ins);
+  return ins; }
+void *hk_tramp(u32 a,void *fn){ u32 *t=(u32*)mmap(0,4096,0x700,0x80002,-1,0); if((int)t==-1){ br_logx("hook: tramp mmap failed",a,0,0); return 0; }
+  t[0]=tramp_ins(a,0,t); t[1]=tramp_ins(a,1,t); t[2]=0xe51ff004; t[3]=a+8;
+  if(hk_patch((void*)a,fn)){ munmap(t,4096); return 0; } return t; }
 typedef struct { u16 blk,byte; u8 mask,val; } cod_t;
 static const cod_t cod_builtin[]={
 #include "coding_tab.inc"
@@ -37,8 +54,10 @@ static void *hk_openBinaryStream(u8 *svc,void *feature){ u32 **o=(u32**)malloc(8
 static u8 *procs[256];
 static u32 hk_getID(u8 *t){ u32 id=t[0xce]; if(!procs[id]){ procs[id]=t; br_logx("procunit",id,(u32)t,*(u32*)t); } return id; }
 extern int pthread_create(void*,const void*,void*(*)(void*),void*);
-static void *pu_c2; static u32 pu_saved[2];
-static void *hk_pu_c2(u8 *t,void *disp,u32 id){ void*(*orig)(void*,void*,u32)=(void*(*)(void*,void*,u32))pu_c2; ((u32*)pu_c2)[0]=pu_saved[0]; ((u32*)pu_c2)[1]=pu_saved[1]; void *r=orig(t,disp,id); hk_patch(pu_c2,hk_pu_c2); id&=255; procs[id]=t; br_logx("procunit",id,(u32)t,*(u32*)t); return r; }
+/* CHmiProcUnit::CHmiProcUnit (C2): patched once, through a trampoline. Before, every construction restored the original code, called it and patched
+   again: other threads could run half-patched code meanwhile, and each patch mapped a new zero page over live library text. */
+static void *(*pu_c2_tramp)(void*,void*,u32);
+static void *hk_pu_c2(u8 *t,void *disp,u32 id){ void *r=pu_c2_tramp(t,disp,id); id&=255; procs[id]=t; br_logx("procunit",id,(u32)t,*(u32*)t); return r; }
 static int app_unit=-1;
 static void send_ctrl(u32 key,int pressed,int repeat,int longp,int unit){ void*(*mk)(void)=(void*(*)(void))0x736fa0; u8*p=procs[unit]; if(!p){ br_logx("input: no proc unit",unit,0,0); return; }
   u8 *ev=(u8*)mk(); *(u32*)(ev+0x18)=key; ev[0x1c]=pressed; *(int*)(ev+0x20)=repeat; ev[0x24]=longp;
@@ -169,7 +188,7 @@ static void crash_h(int sg,u32 *info,u32 *uc){ static int n; if(n++==0){ br_logx
     if((u32)info>0x1000&&(u32)info<0xf0000000){ br_logx("CRASH info",info[0],info[1],info[2]); br_logx("CRASH info2",info[3],info[4],info[5]); }
     if((u32)uc>0x1000&&(u32)uc<0xf0000000){ for(int i=0;i<64;i+=4) if(uc[i]||uc[i+1]||uc[i+2]||uc[i+3]){ br_logx("CRASH ctx",i,uc[i],uc[i+1]); br_logx(" ",uc[i+2],uc[i+3],0); } }
     hk_bt("crash"); } signal(sg,(void(*)(int))0); }
-void install_hooks(void){ static int done; if(done) return; done=1;
+void install_hooks(void){ static int done; if(__atomic_exchange_n(&done,1,__ATOMIC_ACQ_REL)) return;
 #ifdef CRASHHK   /* diagnóstico de quedas (-DCRASHHK): ligado, o iDrive 5 não termina de subir (sinal capturado no boot); desligado por padrão */
   signal(11,(void(*)(int))crash_h); signal(10,(void(*)(int))crash_h); signal(4,(void(*)(int))crash_h); signal(8,(void(*)(int))crash_h);
 #endif
@@ -180,7 +199,7 @@ void install_hooks(void){ static int done; if(done) return; done=1;
   stc_tramp=(int(*)(void*,u32,u32,u32))hk_tramp(0x2f9308,hk_stc);
   hk_patch((void*)0x18d8800,hk_pmd); hk_patch((void*)0x18d8ef8,hk_pm);
   { void *a=hk_sym("libhmicom.so","_ZN12CHmiProcUnit15updateAliveTimeEv"); if(a) alive_tramp=(void(*)(void*))hk_tramp((u32)a,hk_alive); }
-  { static u32 tid; pu_c2=hk_sym("libhmicom.so","_ZN12CHmiProcUnitC2ER18CHmiMainDispatcherh"); if(pu_c2){ pu_saved[0]=((u32*)pu_c2)[0]; pu_saved[1]=((u32*)pu_c2)[1]; hk_patch(pu_c2,hk_pu_c2); } }
+  { void *a=hk_sym("libhmicom.so","_ZN12CHmiProcUnitC2ER18CHmiMainDispatcherh"); if(a) pu_c2_tramp=(void*(*)(void*,void*,u32))hk_tramp((u32)a,hk_pu_c2); }
   getdef=(int(*)(u32,const u8**,u32*))hk_sym("libhmicoding.so","sysetDefaults_getBuffer");
   dsi_ctor=(void*(*)(void*,u16))hk_sym("libhmicoding.so","_ZN16CDsiBinaryStreamC1Et");
   hk("libhmicoding.so","_ZN16CDsiBinaryStream15readCodingBlockEPvj",hk_readCodingBlock);

@@ -601,6 +601,16 @@ window.IDE = window.IDE || {};
     ['sem permissão', 'Permission denied'],
     ['não encontrado', 'Not found'],
     ['JSON inválido', 'Invalid JSON'],
+    ['coding deve ser um objeto', 'coding must be an object'],
+    ['aguarde a extração dos arquivos do sistema terminar', 'Wait for the system file extraction to finish'],
+    ['Content-Length inválido', 'Invalid Content-Length'],
+    ['corpo do pedido inválido', 'Invalid request body'],
+    ['o corpo deve ser um objeto JSON', 'The body must be a JSON object'],
+    ['monitor do QEMU fechou', 'The QEMU monitor closed'],
+    ['Reprodução parada.', 'Playback stopped.'],
+    ['Parar reprodução', 'Stop playback'],
+    ['ambiente parado durante a gravação', 'The environment was stopped while saving'],
+    ['o QEMU não registrou o snapshot', 'QEMU did not record the snapshot'],
     ['idioma inválido', 'Invalid language'],
     ['PSDZData válido', 'Valid PSDZData'],
     ['pasta inválida: precisa conter swe/swfl e mainseries', 'Invalid folder: it must contain swe/swfl and mainseries'],
@@ -1414,6 +1424,9 @@ window.IDE = window.IDE || {};
      First match wins, so specific rules go before general ones. */
   /* I18N-RULES-BEGIN */
   const RULES = [
+    ['monitor do QEMU não respondeu a "%s"', 'The QEMU monitor did not answer "%s"'],
+    ['monitor do QEMU fechou durante "%s"', 'The QEMU monitor closed during "%s"'],
+    ['parâmetro inválido: %t', 'invalid parameter: %t'],
     ['tipo de head unit desconhecido: %s', 'unknown head unit type: %s'],
     ['arquivo SWFL não encontrado: %s', 'SWFL file not found: %s'],
     ['falha ao extrair %s: %t', 'could not extract %s: %t'],

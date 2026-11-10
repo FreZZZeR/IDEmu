@@ -38,6 +38,8 @@ longo demais para QNX4). O guest nunca grava nos arquivos de imagem: o QEMU copi
 Tudo que é "tradução" vive em `shim.img` e em symlinks do pathmgr criados na partida
 (`ln -sP /fs/shim/lib/... /lib/...`), sem alterar nenhum arquivo do sistema.
 
+**Mapa de memória do iDrive 5/6 (placa `omap5-uevm`).** RAM em 0x80000000; `sda` em 0x60000000; `sdb` em 0x01000000. A janela de 32 MB em 0x7e000000 tem, por cima, o buffer da ponte GL (0x7e000000–0x7f000000) e os registradores dela (0x7ff00000): o `shim.img` (15 MB) fica entre os dois, em 0x7f000000–0x7ff00000 (`Runtime._shim_addr`). Até 2026-11-09 ele ia em 0x7e000000 com 32 MB, e o tráfego GL sobrescrevia o sistema de arquivos depois do boot (medido com `pmemsave` 40 s após o HMI desenhar: 752 blocos de 4 KB diferentes do `shim.img`, a partir do bloco 0; no layout novo, 6, só metadados do QNX4). Shims antigos de 32 MB continuam sendo carregados no endereço antigo e o servidor os refaz na próxima partida.
+
 ## Limites conhecidos
 * Só uma versão do HMI foi validada (sha256 em `idemu/data/known_hmi.json`); outras compilam, mas os patches
   em memória do shim usam endereços fixos desse binário e podem falhar.

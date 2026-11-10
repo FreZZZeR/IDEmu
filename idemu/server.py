@@ -28,7 +28,7 @@ def fs_space(path):
 class App:
     def __init__(self):
         os.makedirs(ENVS, exist_ok=True)
-        self.rt = None; self.builds = {}; self.flashes = {}; self.lock = threading.Lock()
+        self.rt = None; self.builds = {}; self.flashes = {}; self.lock = threading.RLock()       # start/build/flash/delete: verificação e registro juntos (clique duplo não cria dois QEMU)
 
     # ---- ambientes ----
     def env_dir(self, eid):
@@ -53,7 +53,9 @@ class App:
     def save_env(self, env):
         e = dict(env); e.pop('build', None); e.pop('snapshot', None)
         os.makedirs(self.env_dir(e['id']), exist_ok=True)
-        json.dump(e, open(os.path.join(self.env_dir(e['id']), 'env.json'), 'w'), indent=1, ensure_ascii=False)
+        p = os.path.join(self.env_dir(e['id']), 'env.json'); tmp = p + '.tmp%d' % threading.get_ident()
+        with open(tmp, 'w') as f: json.dump(e, f, indent=1, ensure_ascii=False)
+        os.replace(tmp, p)          # atômico: quem lê ao mesmo tempo (a lista de ambientes) nunca vê o arquivo pela metade
     def build_info(self, eid):
         b = self.builds.get(eid)
         if b: return {k: b[k] for k in ('state', 'pct', 'step', 'error', 'built_at')}
@@ -109,7 +111,7 @@ class App:
             if role not in ('hu', 'rse'): raise ApiError('tela do iDrive 7 desconhecida (use hu ou rse)')
             rse = role == 'rse'
             env = {'id': eid, 'name': name, 'created': datetime.datetime.now().isoformat(timespec='seconds'), 'kind': 'mgu7', 'role': role, 'series': 'RSE' if rse else 'HU', 'chassis': 'RSE' if rse else 'HU', 'brand': 'bmw',
-                   'model_name': d.get('model_name') or 'BMW RSE (banco traseiro)' if rse else 'BMW iDrive 7 (tela central)', 'swfl': {},
+                   'model_name': d.get('model_name') or ('BMW RSE (banco traseiro)' if rse else 'BMW iDrive 7 (tela central)'), 'swfl': {},
                    'coding': {'language': 'en_GB', 'units': 'metric', 'country': 'GB', 'vin': dvin, 'display': '1920x1080' if rse else '1920x720', 'hmi_version': 'id7', 'navi': '',
                               'extra': {} if rse else dict(coding7.DEFAULT_HU)}, 'net': {}}
             return self._save_new(env, d.get('home'))
@@ -148,19 +150,24 @@ class App:
         env = self.load_env(eid); env.pop('build', None); env.pop('snapshot', None)
         if d.get('name'): env['name'] = d['name']
         if 'fast_boot' in d: env['fast_boot'] = bool(d['fast_boot'])
-        if 'coding' in d: env['coding'].update(d['coding'])
+        if 'coding' in d:
+            if not isinstance(d['coding'], dict): raise ApiError('coding deve ser um objeto')
+            env['coding'].update(d['coding'])
+            v = (env['coding'].get('vin') or '').upper(); env['coding']['vin'] = v
+            if v and not vin.VIN_RE.match(v): raise ApiError('VIN deve ter 17 caracteres (sem I, O, Q)')
         if 'net' in d: env['net'].update(d['net'])
         for k in ('chassis', 'series', 'model_name'):
             if d.get(k) is not None: env[k] = d[k]
         if not env.get('kind'):
             if env['coding'].get('hu_variant') and not catalog.hu_variant(env['coding']['hu_variant']): raise ApiError('tipo de head unit desconhecido')
             if codegen.enum_values('BAUREIHE') and env['chassis'] not in codegen.enum_values('BAUREIHE'): raise ApiError('chassi desconhecido: ' + env['chassis'])
-        self.save_env(env)
-        # recodificar: refaz só o shim (rápido) se o ambiente já foi compilado (só o iDrive 5/6 tem shim; os outros aplicam a codificação na próxima partida)
+        # recodificar: refaz só o shim (rápido) se o ambiente já foi compilado (só o iDrive 5/6 tem shim; os outros aplicam a codificação na próxima partida).
+        # Antes de salvar: se falhar, o env.json continua descrevendo o shim que está no disco.
         if not env.get('kind') and self.build_info(eid)['state'] == 'ready' and ('coding' in d or 'chassis' in d):
             try: self._rebuild_shim(eid, env)
             except Exception as e:
                 raise ApiError('falha ao regravar a codificação: %s' % e, 500)
+        self.save_env(env)
         return self.load_env(eid)
     def _extract_cfg(self, env, os_dir):
         """Extrai do SWFL do sistema só o que o shim precisa (starter.cfg, io-ipc-o5.cfg, persistTracemost.bin) para <os_dir>."""
@@ -176,6 +183,8 @@ class App:
                 shutil.copy(src, target)
         shutil.rmtree(tmp, ignore_errors=True)
     def start_build(self, eid):
+        with self.lock: return self._start_build(eid)
+    def _start_build(self, eid):
         env = self.load_env(eid); env.pop('build', None); env.pop('snapshot', None)
         if self.rt and self.rt.id == eid and self.rt.state != 'stopped': raise ApiError('pare o ambiente antes de compilar')
         b = self.builds.get(eid)
@@ -204,9 +213,13 @@ class App:
                 log(traceback.format_exc()); b['state'] = 'error'; b['error'] = str(e)
         threading.Thread(target=run, daemon=True).start()
     def delete(self, eid):
+        with self.lock: return self._delete(eid)
+    def _delete(self, eid):
         if self.rt and self.rt.id == eid and self.rt.state in ('booting', 'running'): raise ApiError('pare o ambiente antes de excluir')
         if (self.builds.get(eid) or {}).get('state') == 'building': raise ApiError('aguarde o build terminar antes de excluir')
         if (self.flashes.get(eid) or {}).get('state') == 'running': raise ApiError('aguarde a gravação da codificação terminar')
+        if any(j.get('state') == 'extracting' and os.path.abspath(k).startswith(os.path.abspath(self.env_dir(eid)) + os.sep) for k, j in list(sysfiles._jobs.items())):
+            raise ApiError('aguarde a extração dos arquivos do sistema terminar')
         if self.rt and self.rt.id == eid: self.rt.stop(); self.rt = None
         self.builds.pop(eid, None); self.flashes.pop(eid, None); sysfiles.forget(eid)
         d = self.env_dir(eid)
@@ -240,7 +253,9 @@ class App:
         finally: shutil.rmtree(tmp, ignore_errors=True)
     def _shim_stale(self, eid):
         """O shim.img do ambiente é mais velho que as bibliotecas do guest ou os scripts de boot (uma atualização do IDEmu): precisa ser refeito para valer."""
-        try: built = os.path.getmtime(os.path.join(self.env_dir(eid), 'images', 'shim.img'))
+        try:
+            p = os.path.join(self.env_dir(eid), 'images', 'shim.img'); built = os.path.getmtime(p)
+            if os.path.getsize(p) > builder.SHIM_SECTORS * 512: return True      # shim de 32 MB (antes da mudança de endereço): refaz no tamanho novo
         except OSError: return False
         here = os.path.dirname(os.path.abspath(__file__))
         for rel in self.SHIM_INPUTS:
@@ -251,11 +266,13 @@ class App:
                 except OSError: pass
         return False
     # ---- execução ----
-    def start(self, eid, cold=False):
+    def start(self, eid, cold=False, _flash=False):
+        with self.lock: return self._start(eid, cold, _flash)
+    def _start(self, eid, cold=False, _flash=False):
         if self.rt and self.rt.state in ('booting', 'running'): raise ApiError('já existe um ambiente em execução; pare-o primeiro')
         env = self.load_env(eid); env.pop('build', None); env.pop('snapshot', None)
         if self.build_info(eid)['state'] != 'ready': raise ApiError('compile o ambiente antes de iniciar')
-        if (self.flashes.get(eid) or {}).get('state') == 'running': raise ApiError('aguarde a gravação da codificação terminar')
+        if not _flash and (self.flashes.get(eid) or {}).get('state') == 'running': raise ApiError('aguarde a gravação da codificação terminar')   # a própria gravação reinicia a head unit (_flash)
         if self.rt and self.rt.state != 'stopped':          # o anterior parou com erro: encerra o que tiver sobrado dele (QEMU, renderizador, portas CAN/GPS)
             try: self.rt.stop()
             except Exception: traceback.print_exc()
@@ -280,6 +297,8 @@ class App:
         j = self.flashes.get(eid)
         return dict(j) if j else {'state': 'idle'}
     def flash(self, eid, changes=None, note='', reset=False, restore=None):
+        with self.lock: return self._flash(eid, changes, note, reset, restore)
+    def _flash(self, eid, changes=None, note='', reset=False, restore=None):
         """Grava a codificação: backup -> aplica -> regenera shim.img -> reinicia a head unit (se estiver ligada) -> confere que o HMI leu a tabela nova."""
         env = self.load_env(eid); env.pop('build', None); env.pop('snapshot', None)
         if env.get('kind') == 'cic': raise ApiError('a gravação de codificação ainda não existe para o iDrive 4')
@@ -313,7 +332,7 @@ class App:
                 shutil.rmtree(tmp, ignore_errors=True)
                 if was_running:
                     j['step'] = 2
-                    self.start(eid)
+                    self.start(eid, _flash=True)
                     rt = self.rt; end = time.time() + 300
                     while rt.state == 'booting' and time.time() < end: time.sleep(0.2)
                     if rt.state != 'running': raise RuntimeError(rt.err or 'a head unit não voltou depois da gravação')
@@ -362,7 +381,7 @@ class App:
                 shutil.rmtree(os.path.join(self.env_dir(eid), 'snapshot'), ignore_errors=True)       # o estado salvo embute a codificação antiga
                 if was_running:
                     j['step'] = 2
-                    self.start(eid)
+                    self.start(eid, _flash=True)
                     rt = self.rt; end = time.time() + 400
                     while rt.state == 'booting' and time.time() < end: time.sleep(0.3)
                     if rt.state != 'running': raise RuntimeError(rt.err or 'a head unit não voltou depois da gravação')
@@ -480,11 +499,15 @@ class H(BaseHTTPRequestHandler):
         for k, v in (extra or {}).items(): self.send_header(k, v)
         self.end_headers(); self.wfile.write(body)
     def _body(self):
-        n = int(self.headers.get('Content-Length') or 0)
+        try: n = int(self.headers.get('Content-Length') or 0)
+        except ValueError: raise ApiError('Content-Length inválido')
+        if n < 0 or n > 64 << 20: raise ApiError('corpo do pedido inválido')
         if not n: return {}
         raw = self.rfile.read(n)
-        try: return json.loads(raw.decode() or '{}')
+        try: d = json.loads(raw.decode() or '{}')
         except Exception: raise ApiError('JSON inválido')
+        if not isinstance(d, dict): raise ApiError('o corpo deve ser um objeto JSON')
+        return d
     def do_GET(self): self._route('GET')
     def do_POST(self): self._route('POST')
     def _foreign(self):
@@ -508,12 +531,14 @@ class H(BaseHTTPRequestHandler):
             else: self.static(u.path)
         except ApiError as e: self._send(e.code, {'error': str(e)})
         except (BrokenPipeError, ConnectionResetError): pass
+        except (KeyError, ValueError, TypeError) as e:       # parâmetro ausente ou mal formado (since=abc, sem "code"...): erro do pedido, não do servidor
+            self._send(400, {'error': 'parâmetro inválido: %s' % (e if not isinstance(e, KeyError) else 'falta %s' % e)}); traceback.print_exc()
         except Exception as e:
             self._send(500, {'error': '%s: %s' % (type(e).__name__, e)}); traceback.print_exc()
     def static(self, path):
         if path in ('', '/'): path = '/index.html'
         p = os.path.normpath(os.path.join(WEB, path.lstrip('/')))
-        if not p.startswith(WEB) or not os.path.isfile(p): raise ApiError('não encontrado', 404)
+        if not p.startswith(WEB + os.sep) or not os.path.isfile(p): raise ApiError('não encontrado', 404)
         ct = mimetypes.guess_type(p)[0] or 'application/octet-stream'
         self._send(200, open(p, 'rb').read(), ct + ('; charset=utf-8' if ct.startswith('text') or 'javascript' in ct else ''))
     def api(self, m, path, q):
@@ -614,7 +639,9 @@ class H(BaseHTTPRequestHandler):
                 if sub == 'backup' and m == 'POST':
                     env = A.load_env(eid); return {'ok': True, 'id': coding.backup(env, A.env_dir(eid), d.get('note', 'Manual backup')), 'backups': coding.list_backups(A.env_dir(eid))}
                 raise ApiError('rota desconhecida', 404)
-            if act == 'stop': A.stop(); return {'ok': True}
+            if act == 'stop':
+                if A.rt and A.rt.id == eid: A.stop()          # só para o ambiente pedido, não o que estiver rodando
+                return {'ok': True}
             if act == 'delete': A.delete(eid); return {'ok': True}
             if act == 'duplicate': return A.duplicate(eid, d.get('name'))
         if path == 'v850/publish' and m == 'POST':       # depuração: envia o Status de uma propriedade MOST ao HMI
@@ -723,7 +750,7 @@ class H(BaseHTTPRequestHandler):
         if path == 'can/scenarios': return can.scenarios()
         if path == 'can/scenario': can.run_scenario(d.get('id')); return {'ok': True}
         if path == 'can/record': r = can.record(bool(d.get('on'))); return {'ok': True, 'file': r}
-        if path == 'can/recordings': return {'recordings': can.recordings()}
+        if path == 'can/recordings': return {'recordings': can.recordings(), 'replaying': bool(getattr(can, '_replaying', False))}
         if path == 'can/replay': can.replay(d.get('file'), bool(d.get('loop'))); return {'ok': True}
         raise ApiError('rota desconhecida', 404)
     def api_gps(self, m, path, q, d):

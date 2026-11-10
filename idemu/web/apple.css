@@ -63,6 +63,7 @@ kbd { background: var(--field); border-color: var(--line2); color: var(--text2);
 .seg-lang button.on { background: var(--glass-strong); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .22), inset 0 1px 0 var(--spec); }
 .side-links { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .conn { border: 0; padding: 0; font-size: 11.5px; background: none; } .conn.down { background: none; border: 0; }
+.sl-ic { display: none; }
 .link-btn { background: none; border: 0; color: var(--muted); font: 500 11.5px var(--sans); cursor: pointer; padding: 3px 6px; border-radius: 6px; } .link-btn:hover { background: var(--hover); color: var(--text); }
 main#view { min-width: 0; }
 .page { max-width: 1180px; padding: 30px 32px 64px; animation: viewIn .38s var(--ease) both; }
@@ -216,7 +217,10 @@ input[type=range]::-webkit-slider-thumb { background: #fff; border: 0; box-shado
 .st-idle { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 70px 20px; color: var(--muted); }
 .st-idle .empty-ico { width: 64px; height: 64px; }
 
-@media (max-width: 1100px) { .app { grid-template-columns: 76px minmax(0, 1fr); } .brand-t, .nav a > span:not(.nv-ic):not(.live-dot), .nav small, .nav-sec, .side-links, .seg-lang { display: none; } .nav a { justify-content: center; padding: 8px; } .brand { justify-content: center; padding: 4px 0 14px; } .sidebar { padding: 18px 8px 14px; } .side-foot { align-items: center; } }
+@media (max-width: 1100px) { .app { grid-template-columns: 76px minmax(0, 1fr); } .brand-t, .nav small, .nav-sec { display: none; }
+  /* barra estreita: os textos saem da tela mas continuam como nome acessível; pasta, tema, tour, idioma e conexão viram ícones em vez de sumir */
+  .nav a > span:not(.nv-ic):not(.live-dot), .sl-t, #conn-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .side-links { flex-direction: column; gap: 4px; } .sl-ic { display: inline-flex; } .link-btn { padding: 6px; } .seg-lang { width: 60px; } .nav a { justify-content: center; padding: 8px; } .brand { justify-content: center; padding: 4px 0 14px; } .sidebar { padding: 18px 8px 14px; } .side-foot { align-items: center; } }
 @media (max-width: 980px) { .st-grid { grid-template-columns: 1fr; } .st-list { position: static; flex-direction: row; flex-wrap: wrap; } .st-tile { flex: 1 1 200px; } }
 @media (prefers-reduced-transparency: reduce) { .card, .modal, .toast, .sidebar { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--glass-strong); } }
 

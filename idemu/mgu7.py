@@ -203,13 +203,16 @@ class Mgu7Runtime(runtime.Runtime):
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.settimeout(timeout)
         try:
             s.connect(self.mon_path); buf = b''
-            while not buf.endswith(b'(qemu) '): buf += s.recv(4096)
-            s.sendall((cmd + '\n').encode()); buf = b''; end = time.time() + timeout
-            while time.time() < end:
-                d = s.recv(65536)
-                if not d: break
+            while not buf.endswith(b'(qemu) '):
+                d = s.recv(4096)
+                if not d: raise OSError('monitor do QEMU fechou')      # antes: laço infinito a 100% de CPU
                 buf += d
-                if buf.endswith(b'(qemu) '): break
+            s.sendall((cmd + '\n').encode()); buf = b''; end = time.time() + timeout
+            while not buf.endswith(b'(qemu) '):
+                if time.time() >= end: raise OSError('monitor do QEMU não respondeu a "%s"' % cmd)
+                d = s.recv(65536)
+                if not d: raise OSError('monitor do QEMU fechou durante "%s"' % cmd)   # QEMU parado no meio de um savevm: não pode virar snapshot "válido"
+                buf += d
             return buf.decode('latin1', 'replace').replace('\r', '')
         finally: s.close()
     def _ring_idle(self):
@@ -242,15 +245,29 @@ class Mgu7Runtime(runtime.Runtime):
             else: raise RuntimeError('o glhost7 não encerrou a gravação')
             out = self.hmp('savevm ' + SNAP_TAG, 600)
             if 'rror' in out or 'annot' in out: raise RuntimeError(out.strip()[-200:])
+            if self.stop_ev.is_set() or self.q is None or self.q.poll() is not None: raise RuntimeError('ambiente parado durante a gravação')
+            if SNAP_TAG not in self.hmp('info snapshots', 30): raise RuntimeError('o QEMU não registrou o snapshot')
             clone_file(self.overlay, os.path.join(tmp, 'disk.qcow2')); os.replace(os.path.join(self.run, 'gl.rec'), os.path.join(tmp, 'gl.rec'))
             json.dump(self.snap_stamps(), open(os.path.join(tmp, 'meta.json'), 'w'))
             shutil.rmtree(self.snap_dir, ignore_errors=True); os.replace(tmp, self.snap_dir); self.snap_state = 'ok'
             print('iDrive 7: snapshot salvo em %.1f s do boot' % (time.time() - self.t0))
         except Exception as e:
             self.snap_state = 'erro: %s' % e; shutil.rmtree(tmp, ignore_errors=True); print('iDrive 7: snapshot não salvo:', e)
+            self._stop_recording()
         finally:
             try: self.hmp('cont')
             except Exception: pass
+    def _stop_recording(self):
+        """Sem snapshot, a gravação do fluxo GL (texturas inclusive) não pode seguir crescendo pela sessão inteira."""
+        import signal
+        try:
+            if self.gl is not None and self.gl.poll() is None: os.kill(self.gl.pid, signal.SIGUSR1)
+        except OSError: pass
+        for _ in range(50):
+            if os.path.exists(os.path.join(self.run, 'gl.rec.done')): break
+            time.sleep(0.1)
+        try: os.unlink(os.path.join(self.run, 'gl.rec'))
+        except OSError: pass
     def _snapshot_when_settled(self):
         """Depois do primeiro boot, com a tela parada há alguns segundos, grava o snapshot (a VM fica pausada por alguns segundos)."""
         t_run = None; last = self.frame_seq(); t_chg = time.time()
@@ -259,7 +276,7 @@ class Mgu7Runtime(runtime.Runtime):
             if q != last: last = q; t_chg = time.time()
             if self.state == 'running':
                 if t_run is None: t_run = time.time()
-                if time.time() - t_run >= 15 and time.time() - t_chg >= 4: self._take_snapshot(); return
+                if time.time() - t_run >= 15 and (time.time() - t_chg >= 4 or time.time() - t_run >= 120): self._take_snapshot(); return   # tela sempre animada: tenta assim mesmo (o anel ocioso é o que garante o ponto seguro)
     def _fix_guest_clock(self):
         self.guest('date -s "%s" >/dev/null' % time.strftime('%Y-%m-%d %H:%M:%S'))
     def _boot_thread(self):
@@ -268,7 +285,7 @@ class Mgu7Runtime(runtime.Runtime):
             hl = open(os.path.join(self.logd, 'renderer.log'), 'wb')
             qemu = find_qemu(); self.shm = ('/idemu-gl-%d-%d' % (os.getpid(), int(time.time()) % 100000)) if has_shm(qemu) else None
             if self.shm: shm_unlink(self.shm)
-            capable = self.snap_capable(); restore = capable and not self._cold and self.snap_valid(); self._restored = restore
+            capable = self.snap_capable() and bool(self.env.get('fast_boot', True)); restore = capable and not self._cold and self.snap_valid(); self._restored = restore
             self.overlay = os.path.join(self.run, 'disk.qcow2') if capable else None
             if capable:
                 if restore: clone_file(os.path.join(self.snap_dir, 'disk.qcow2'), self.overlay)
@@ -331,12 +348,18 @@ class Mgu7Runtime(runtime.Runtime):
                         if restore: self.boot_kind = 'fast'
                     elif time.time() > end: raise RuntimeError('o HMI não desenhou em 30 minutos; veja logs/console.log')
                 else: self.frame_seq()
-                if capable and not restore and not snap_started and self.state == 'running' and not self.snap_valid():
-                    snap_started = True; threading.Thread(target=self._snapshot_when_settled, daemon=True).start()
+                if capable and not restore and not snap_started and self.state == 'running':
+                    snap_started = True     # já existe um snapshot válido (boot completo pedido): só encerra a gravação do fluxo GL, que cresceria pela sessão inteira
+                    threading.Thread(target=self._stop_recording if self.snap_valid() else self._snapshot_when_settled, daemon=True).start()
                 time.sleep(0.25)
         except runtime.BootStopped: pass
         except Exception as e:
-            if not self.stop_ev.is_set(): self.err = str(e); self.state = 'error'; self._kill_children()
+            if self.stop_ev.is_set(): return
+            if getattr(self, '_restored', False) and self.state == 'booting' and not getattr(self, '_retried', False):   # snapshot ruim: apaga e faz o boot completo, como o iDrive 5/6
+                print('iDrive 7: boot rápido falhou (%s); fazendo boot completo' % e)
+                self._retried = True; self._kill_children(); self.drop_snapshot(); self._cold = True; self.boot_kind = 'cold'
+                return self._boot_thread()
+            self.err = str(e); self.state = 'error'; self._kill_children()
     STEPS = {'vsomeipd': 'Iniciando os serviços SOME/IP', 'codingshm': 'Carregando a codificação', 'persod': 'Iniciando a persistência', 'ioclc': 'Emulando o controlador de E/S',
              'udpnm': 'Acordando a rede do carro', 'nsm': 'Iniciando o gerenciador de estados', 'nsc': 'Iniciando o controlador de partida', 'wl': 'Iniciando o compositor Wayland',
              'hmi': 'Iniciando o HMI do iDrive 7 (leva alguns minutos)'}
@@ -421,6 +444,7 @@ class Mgu7Runtime(runtime.Runtime):
         return s
     # ---------- quadro: o glhost7 grava <w, h, seq> (3 inteiros) + RGBA a partir do byte 64 ----------
     def _hdr(self, m): return struct.unpack_from('<iii', m, 0)
+    def _busy(self, m): return struct.unpack_from('<i', m, 12)[0]      # quadro em escrita (glhost7 novo); 0 nos binários antigos
     def frame_seq(self):
         m = self._map()
         if not m or len(m) < 64: return 0
@@ -437,21 +461,23 @@ class Mgu7Runtime(runtime.Runtime):
     def frame_bytes(self):
         m = self._map()
         if not m or len(m) < 64: return None
-        for _ in range(3):
-            w, h, seq = self._hdr(m)
+        for _ in range(6):
+            w, h, seq = self._hdr(m); b = self._busy(m)
             if not seq or w <= 0 or h <= 0 or len(m) < 64 + w * h * 4: return None
+            if b and b != seq: time.sleep(0.002); continue          # o glhost7 está escrevendo este quadro
             rgb = self._rgb(m, w, h)
-            if self._hdr(m)[2] == seq: break
+            if self._hdr(m)[2] == seq and self._busy(m) == b: break
         return seq, w, h, rgb
     def frame_rgba(self):
         """O quadro como o glhost7 o grava (RGBA, topo primeiro): o navegador o usa direto, sem converter para RGB e de volta."""
         m = self._map()
         if not m or len(m) < 64: return None
-        for _ in range(3):
-            w, h, seq = self._hdr(m)
+        for _ in range(6):
+            w, h, seq = self._hdr(m); b = self._busy(m)
             if not seq or w <= 0 or h <= 0 or len(m) < 64 + w * h * 4: return None
+            if b and b != seq: time.sleep(0.002); continue          # o glhost7 está escrevendo este quadro
             raw = bytes(m[64:64 + w * h * 4])
-            if self._hdr(m)[2] == seq: break
+            if self._hdr(m)[2] == seq and self._busy(m) == b: break  # nada começou a ser escrito durante a cópia (quadro inteiro)
         return seq, w, h, raw
     def screen_png(self):
         seq0 = self.frame_seq()

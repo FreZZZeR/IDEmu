@@ -6,6 +6,7 @@ window.IDE = window.IDE || {};
   const ICONS = {
     play: '<polygon points="7 4 20 12 7 20 7 4" fill="currentColor"/>',
     stop: '<rect x="5.5" y="5.5" width="13" height="13" rx="2" fill="currentColor"/>',
+    palette: '<path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="10" cy="7.5" r="1" fill="currentColor"/><circle cx="14.5" cy="7.5" r="1" fill="currentColor"/>',
     wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7 6.3 21l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.5-.5-.5-2.5z"/>',
     copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
     trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
@@ -98,6 +99,8 @@ window.IDE = window.IDE || {};
   function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
   function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function add(el, ...kids) { append(el, kids); return el; }
+  /** Texto do usuário ou do sistema (nome de ambiente, chassi, arquivo): entra como está, sem passar pelo tradutor. */
+  IDE.raw = (s) => document.createTextNode(s == null ? '' : String(s));
   Object.assign(IDE, { h, ic, clear, esc, add });
 
   /* ------------------------------------------------------------------ formatação */
@@ -213,22 +216,26 @@ window.IDE = window.IDE || {};
   };
 
   /* ------------------------------------------------------------------ modais */
+  const openModals = new Set();
+  /* fecha todos os diálogos pelo close() de cada um (onClose roda, o listener de teclado sai): a troca de tela usava IDE.clear e deixava os dois para trás */
+  IDE.closeModals = function () { Array.from(openModals).forEach((m) => { try { m.close(); } catch (e) { console.error(e); } }); };
   IDE.modal = function (opts) {
     const root = document.getElementById('modal-root');
+    const locked = !!opts.locked;         // locked: sem X, sem Esc e sem clique fora (operação em andamento no servidor); persistent: só sem clique fora
     const prevFocus = document.activeElement;
     const body = h('div', { class: 'modal-body' });
     const foot = h('div', { class: 'modal-foot' });
     const titleEl = h('h2', null, opts.title || '');
     const box = h('div', { class: 'modal ' + (opts.size || ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title || 'Diálogo' },
       h('div', { class: 'modal-head' }, titleEl,
-        h('button', { class: 'icon-btn', title: 'Fechar', 'aria-label': 'Fechar', onclick: () => api.close() }, ic('x', 18))),
+        locked ? null : h('button', { class: 'icon-btn', title: 'Fechar', 'aria-label': 'Fechar', onclick: () => api.close() }, ic('x', 18))),
       body, foot);
     const back = h('div', { class: 'backdrop' }, box);
     let closed = false;
     const api = {
       el: box, body, foot, setTitle(t) { titleEl.textContent = IDE.t(t); },
       close(val) {
-        if (closed) return; closed = true;
+        if (closed) return; closed = true; openModals.delete(api);
         document.removeEventListener('keydown', onKey, true);
         back.classList.remove('in');
         setTimeout(() => back.remove(), 180);
@@ -238,7 +245,7 @@ window.IDE = window.IDE || {};
     };
     function onKey(e) {
       if (root.lastElementChild !== back) return; // só o diálogo do topo reage
-      if (e.key === 'Escape') { e.stopPropagation(); api.close(); }
+      if (e.key === 'Escape') { e.stopPropagation(); if (!locked) api.close(); }
       else if (e.key === 'Tab') { // prende o foco no diálogo
         const f = box.querySelectorAll('button:not([disabled]),input:not([disabled]),select,textarea,[tabindex="0"]');
         if (!f.length) return;
@@ -247,8 +254,8 @@ window.IDE = window.IDE || {};
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }
     }
-    back.addEventListener('mousedown', (e) => { if (e.target === back && !opts.persistent) api.close(); });
-    document.addEventListener('keydown', onKey, true);
+    back.addEventListener('mousedown', (e) => { if (e.target === back && !opts.persistent && !locked) api.close(); });
+    document.addEventListener('keydown', onKey, true); openModals.add(api);
     if (opts.body) append(body, [opts.body]);
     (opts.actions || []).forEach((a) => {
       const b = h('button', { class: 'btn ' + (a.kind || ''), type: 'button' }, a.icon ? ic(a.icon, 16) : null, a.label);
@@ -326,7 +333,8 @@ window.IDE = window.IDE || {};
       if (stop) return;
       try { await fn(); } catch (e) { /* silencioso: reconecta sozinho */ }
       if (stop) return;
-      t = setTimeout(run, typeof msFn === 'function' ? msFn() : msFn);
+      const ms = typeof msFn === 'function' ? msFn() : msFn;
+      t = setTimeout(run, document.hidden ? Math.max(ms, 3000) : ms);      // janela ou aba escondida: no máximo uma consulta a cada 3 s
     }
     run();
     return () => { stop = true; clearTimeout(t); };

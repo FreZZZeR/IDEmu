@@ -25,10 +25,12 @@ static GLuint cur_arr, cur_elem, scratch_vbo[16], scratch_ebo;
 static u32 rb_ds[65536];
 static int winw=1440,winh=710, glready;
 static inline float F(u32 x){ union{u32 u;float f;}c; c.u=x; return c.f; }
+#define MAPMAX (1u<<22)   /* ids do guest acima disso (ou classe fora de 0..4) seriam memória corrompida ou laço infinito em setmap */
 static void setmap(int cls,u32 gid,u32 hid){
+  if(cls<0||cls>=5||gid>=MAPMAX) return;
   if(gid>=mapcap[cls]){ u32 nc=mapcap[cls]?mapcap[cls]:4096; while(nc<=gid) nc*=2; maps[cls]=realloc(maps[cls],nc*4); memset(maps[cls]+mapcap[cls],0,(nc-mapcap[cls])*4); mapcap[cls]=nc; }
   maps[cls][gid]=hid; }
-static GLuint H(int cls,u32 gid){ if(cls==2&&gid==0) return screen_fbo; if(!gid) return 0; if(gid>=mapcap[cls]) return 0; return maps[cls][gid]; }
+static GLuint H(int cls,u32 gid){ if(cls<0||cls>=5) return 0; if(cls==2&&gid==0) return screen_fbo; if(!gid) return 0; if(gid>=mapcap[cls]) return 0; return maps[cls][gid]; }
 static void ensure_screen(int w,int h){
   if(screen_fbo&&w==sw&&h==sh) return;
   if(!screen_fbo){ glGenFramebuffersEXT(1,&screen_fbo); glGenTextures(1,&screen_tex); glGenRenderbuffersEXT(1,&screen_rb); }
@@ -56,8 +58,12 @@ static unsigned char *fmap; static size_t fmaplen; static double fexp_t; static 
 static int map_readback(unsigned char *out); static GLuint map_present_tex(void);
 static void export_frame(void){ if(!fmap) return; fdirty=1; struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts); double t=ts.tv_sec+ts.tv_nsec*1e-9; if(t-fexp_t<0.033) return; fexp_t=t; fdirty=0; GLint sfbo; glGetIntegerv(GL_FRAMEBUFFER_BINDING_EXT,&sfbo);
   size_t need=32+(size_t)sw*sh*3; if(need>fmaplen) return; static unsigned char *tmp; static size_t tcap; if(tcap<(size_t)sw*sh*3){ tcap=(size_t)sw*sh*3; tmp=realloc(tmp,tcap); }
-  if(!map_readback(tmp)){ glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,screen_fbo); glPixelStorei(GL_PACK_ALIGNMENT,1); glReadPixels(0,0,sw,sh,GL_RGB,GL_UNSIGNED_BYTE,tmp); glPixelStorei(GL_PACK_ALIGNMENT,4); }
-  unsigned *h=(unsigned*)fmap; for(int y=0;y<sh;y++) memcpy(fmap+32+(size_t)y*sw*3,tmp+(size_t)(sh-1-y)*sw*3,(size_t)sw*3);
+  if(!map_readback(tmp)){ GLint pbo=0,rl=0,sr=0,sp=0; glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING,&pbo); glGetIntegerv(GL_PACK_ROW_LENGTH,&rl); glGetIntegerv(GL_PACK_SKIP_ROWS,&sr); glGetIntegerv(GL_PACK_SKIP_PIXELS,&sp);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER,0); glPixelStorei(GL_PACK_ROW_LENGTH,0); glPixelStorei(GL_PACK_SKIP_ROWS,0); glPixelStorei(GL_PACK_SKIP_PIXELS,0);   /* estado do guest não pode estourar tmp */
+    glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,screen_fbo); glPixelStorei(GL_PACK_ALIGNMENT,1); glReadPixels(0,0,sw,sh,GL_RGB,GL_UNSIGNED_BYTE,tmp); glPixelStorei(GL_PACK_ALIGNMENT,4);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER,pbo); glPixelStorei(GL_PACK_ROW_LENGTH,rl); glPixelStorei(GL_PACK_SKIP_ROWS,sr); glPixelStorei(GL_PACK_SKIP_PIXELS,sp); }
+  unsigned *h=(unsigned*)fmap; h[4]=h[1]+1; __sync_synchronize();   /* [4] = quadro em escrita, [1] = último completo: o leitor descarta cópias rasgadas */
+  for(int y=0;y<sh;y++) memcpy(fmap+32+(size_t)y*sw*3,tmp+(size_t)(sh-1-y)*sw*3,(size_t)sw*3);
   h[0]=0x52464449; h[2]=sw; h[3]=sh; __sync_synchronize(); h[1]++; glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,sfbo); }
 static int window_shown;
 static void present(void){
@@ -130,17 +136,18 @@ static const char *opname[]={
 static void process(u32 *w,u32 nbytes){
   u32 *end=w+nbytes/4; rl=0; rp=repbuf;
   while(w+2<=end){
-    u32 op=w[0],n=w[1]; u32 *a=w+2; w+=2+n;
-    if(w>end){ fprintf(stderr,"[host] truncated cmd op=%u\n",op); break; }
+    u32 op=w[0],n=w[1]; u32 *a=w+2;
+    if(n>(u32)(end-w-2)){ fprintf(stderr,"[host] truncated cmd op=%u\n",op); break; }   /* antes de somar: 2+n em 32 bits dava a volta e o laço não terminava */
+    w+=2+n;
     if(probe_pending){ probe_pending=0; probe_after(); }
     if(gltrace>0&&op!=OP_LOG&&op!=OP_GETINPUT){ gltrace--; fprintf(stderr,"[gl] %s %x %x %x %x\n",op<sizeof opname/sizeof opname[0]?opname[op]:"?",n>0?a[0]:0,n>1?a[1]:0,n>2?a[2]:0,n>3?a[3]:0); }
     if(nogl&&op!=OP_LOG&&op!=OP_SWAP){ continue; }
     switch(op){
 #include "gen_host.inc"
-    case OP_GEN:{ u32 cls=a[0],cnt=a[1],i; for(i=0;i<cnt;i++){ GLuint h=0; if(cls==0) glGenTextures(1,&h); else if(cls==1) glGenBuffers(1,&h); else if(cls==2) glGenFramebuffersEXT(1,&h); else glGenRenderbuffersEXT(1,&h); setmap(cls,a[2+i],h); } break; }
+    case OP_GEN:{ u32 cls=a[0],cnt=a[1],i; if(n<2||cls>=5) break; if(cnt>n-2) cnt=n-2; for(i=0;i<cnt;i++){ GLuint h=0; if(cls==0) glGenTextures(1,&h); else if(cls==1) glGenBuffers(1,&h); else if(cls==2) glGenFramebuffersEXT(1,&h); else glGenRenderbuffersEXT(1,&h); setmap(cls,a[2+i],h); } break; }
     case OP_MAPBIND: map_bind(a[0],a[1],a[2]); break;
     case OP_MAPLAYER: map_set_layer(a[0],a[1],a[2],a[3],a[4]); break;
-    case OP_DEL:{ u32 cls=a[0],cnt=a[1],i; for(i=0;i<cnt;i++){ GLuint h=H(cls,a[2+i]); if(!h) continue; if(cls==0){ map_forget(h); glDeleteTextures(1,&h); } else if(cls==1) glDeleteBuffers(1,&h); else if(cls==2) glDeleteFramebuffersEXT(1,&h); else if(cls==3) glDeleteRenderbuffersEXT(1,&h); else { if(glIsShader(h)) glDeleteShader(h); else glDeleteProgram(h);} setmap(cls,a[2+i],0); } break; }
+    case OP_DEL:{ u32 cls=a[0],cnt=a[1],i; if(n<2||cls>=5) break; if(cnt>n-2) cnt=n-2; for(i=0;i<cnt;i++){ GLuint h=H(cls,a[2+i]); if(!h) continue; if(cls==0){ map_forget(h); glDeleteTextures(1,&h); } else if(cls==1) glDeleteBuffers(1,&h); else if(cls==2) glDeleteFramebuffersEXT(1,&h); else if(cls==3) glDeleteRenderbuffersEXT(1,&h); else { if(glIsShader(h)) glDeleteShader(h); else glDeleteProgram(h);} setmap(cls,a[2+i],0); } break; }
     case OP_CREATESHADER: setmap(4,a[0],glCreateShader(a[1])); break;
     case OP_CREATEPROGRAM: setmap(4,a[0],glCreateProgram()); break;
     case OP_BUFFERDATA: glBufferData(a[0],a[1],NULL,a[2]); break;
@@ -170,7 +177,12 @@ static void process(u32 *w,u32 nbytes){
       u32 *r=repbuf; r[0]=sz; r[1]=ty; r[2]=0; memcpy(r+3,nm,l); rp=repbuf; rl=12+l; break; }
     case OP_GETINTEGERV:{ u32 r[16]; memset(r,0,sizeof r); if(a[1]==0){ GLint v[16]={0}; glGetIntegerv(a[0],v); memcpy(r,v,sizeof v);} else if(a[1]==1){ GLfloat v[16]={0}; glGetFloatv(a[0],v); memcpy(r,v,sizeof v);} else { GLboolean v[16]={0}; glGetBooleanv(a[0],v); for(int i=0;i<16;i++) r[i]=v[i]; }
       reply_bytes(r,sizeof r); break; }
-    case OP_READPIXELS:{ u32 row=a[6]; u32 sz=row*a[3]; u32 *tmp=malloc(sz+16); glReadPixels(a[0],a[1],a[2],a[3],a[4],a[5],tmp); reply_bytes(tmp,sz); free(tmp); break; }
+    case OP_READPIXELS:{ /* o buffer tem o tamanho que o GL escreve (até 4 bytes por pixel, com alinhamento), não o que o guest diz; a resposta cabe no repbuf */
+      u32 row=a[6]; if(a[2]>8192||a[3]>8192){ reply_bytes(repbuf,0); break; }
+      size_t sz=(size_t)row*a[3]; if(sz>sizeof repbuf) sz=sizeof repbuf;
+      size_t gl=((size_t)a[2]*4+8)*a[3]+16; void *tmp=calloc(1,(sz>gl?sz:gl)+16);
+      GLint pbo=0; glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING,&pbo); glBindBuffer(GL_PIXEL_PACK_BUFFER,0); glPixelStorei(GL_PACK_ROW_LENGTH,0); glPixelStorei(GL_PACK_SKIP_ROWS,0); glPixelStorei(GL_PACK_SKIP_PIXELS,0);
+      glReadPixels(a[0],a[1],a[2],a[3],a[4],a[5],tmp); glBindBuffer(GL_PIXEL_PACK_BUFFER,pbo); reply_bytes(tmp,(u32)sz); free(tmp); break; }
     case OP_CHECKFB: reply_u32(glCheckFramebufferStatusEXT(a[0])); break;
     case OP_GETATTACHED:{ GLuint ids[32]; GLsizei c=0; u32 mx=a[1]>32?32:a[1]; glGetAttachedShaders(H(4,a[0]),mx,&c,ids); u32 r[34]; r[0]=c; for(int i=0;i<c;i++){ r[1+i]=0; for(u32 g=1;g<mapcap[4];g++) if(maps[4][g]==ids[i]){ r[1+i]=g; break; } } reply_bytes(r,4+4*c); break; }
     case OP_SWAP: screen_seen=1; panel_dirty=0; ensure_screen(a[0],a[1]); if(!nogl&&!replaying){ present(); } reply_u32(0); { static int nsw; nswaps=++nsw; if(nsw<5||nsw%100==0) fprintf(stderr,"[host] swap #%d\n",nsw); } break;
@@ -196,7 +208,8 @@ static void idle(void){
     if(pf[0].revents&POLLIN){ int f=accept(lfd,0,0); if(f>=0){ if(cfd>=0) close(cfd); cfd=f; fprintf(stderr,"[host] guest connected\n"); } }
     if(n>1&&(pf[1].revents&(POLLIN|POLLHUP))){
       u32 len; if(rd(cfd,&len,4)){ close(cfd); cfd=-1; fprintf(stderr,"[host] guest disconnected\n"); return; }
-      if(len>reqcap){ reqcap=len+4096; reqbuf=realloc(reqbuf,reqcap); }
+      if(len>(64u<<20)){ fprintf(stderr,"[host] request too large (%u)\n",len); close(cfd); cfd=-1; return; }
+      if(len>reqcap){ reqcap=len+4096; reqbuf=realloc(reqbuf,reqcap); if(!reqbuf){ reqcap=0; close(cfd); cfd=-1; return; } }
       if(rd(cfd,reqbuf,len)){ close(cfd); cfd=-1; return; }
       rec_write(reqbuf,len); process(reqbuf,len);
       u32 rlen=rl; if(wr(cfd,&rlen,4)||wr(cfd,repbuf,rlen)){ close(cfd); cfd=-1; }
@@ -205,7 +218,7 @@ static void idle(void){
 }
 static int replay_file(const char *path){
   FILE *f=fopen(path,"rb"); if(!f){ perror(path); return -1; } double t0=now_s(); u32 len; long long total=0; u32 cnt=0; replaying=1; static char iob[1<<20]; setvbuf(f,iob,_IOFBF,sizeof iob);
-  while(fread(&len,4,1,f)==1){ if(len>reqcap){ reqcap=len+4096; reqbuf=realloc(reqbuf,reqcap); } if(fread(reqbuf,1,len,f)!=len) break; process(reqbuf,len); total+=len; cnt++; }
+  while(fread(&len,4,1,f)==1){ if(len>(64u<<20)) break; if(len>reqcap){ reqcap=len+4096; reqbuf=realloc(reqbuf,reqcap); } if(fread(reqbuf,1,len,f)!=len) break; process(reqbuf,len); total+=len; cnt++; }
   fclose(f); replaying=0; glFinish();
   if(fmap){ GLint fbo; glGetIntegerv(GL_FRAMEBUFFER_BINDING_EXT,&fbo); fexp_t=0; export_frame(); glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,fbo); }
   fprintf(stderr,"[host] replay: %u pedidos, %lld MB em %.2f s\n",cnt,total>>20,now_s()-t0); return 0; }

@@ -166,6 +166,6 @@ case OP_CheckFramebufferStatus: { unsigned long r = (unsigned long)(long)p_Check
 case OP_CreateProgram: { unsigned long r = (unsigned long)(long)p_CreateProgram(); wr(c, &r, 8); } break;
 case OP_CreateShader: { unsigned long r = (unsigned long)(long)p_CreateShader((unsigned)a[0]); wr(c, &r, 8); } break;
 case OP_GetError: { unsigned long r = (unsigned long)(long)p_GetError(); wr(c, &r, 8); } break;
-case OP_GetAttribLocation: { char *s1 = scratch(c, a[1]); rd(c, s1, a[1]); unsigned long r = (unsigned long)(long)p_GetAttribLocation((unsigned)a[0], s1); wr(c, &r, 8); } break;
-case OP_GetUniformLocation: { char *s1 = scratch(c, a[1]); rd(c, s1, a[1]); unsigned long r = (unsigned long)(long)p_GetUniformLocation((unsigned)a[0], s1); wr(c, &r, 8); } break;
+case OP_GetAttribLocation: { char *s1 = str_payload(c, a[1]); unsigned long r = (unsigned long)(long)p_GetAttribLocation((unsigned)a[0], s1); wr(c, &r, 8); } break;
+case OP_GetUniformLocation: { char *s1 = str_payload(c, a[1]); unsigned long r = (unsigned long)(long)p_GetUniformLocation((unsigned)a[0], s1); wr(c, &r, 8); } break;
 #endif

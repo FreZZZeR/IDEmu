@@ -322,7 +322,8 @@ static void omap5_uevm_init(MachineState *machine)
         MemoryRegion *disk2 = g_new(MemoryRegion, 1);
         memory_region_init_ram(disk2, NULL, "omap5.sdb", 0x3f000000, &error_fatal);
         memory_region_add_subregion(sysmem, 0x01000000, disk2);
-        /* shim disk (IDEmu overlay: translation libs, boot scripts) 0x7e000000-0x80000000 */
+        /* shim disk window 0x7e000000-0x80000000. glb_init() maps the GL bridge buffer over the first 16 MB and its registers at 0x7ff00000,
+         * so the IDEmu runtime loads the shim (15 MB) at 0x7f000000-0x7ff00000; older 32 MB shims at 0x7e000000 got overwritten by GL traffic. */
         MemoryRegion *disk3 = g_new(MemoryRegion, 1);
         memory_region_init_ram(disk3, NULL, "omap5.shim", 0x02000000, &error_fatal);
         memory_region_add_subregion(sysmem, 0x7e000000, disk3);

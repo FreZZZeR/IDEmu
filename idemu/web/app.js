@@ -40,7 +40,7 @@
     if (current) { try { current.unmount && current.unmount(); } catch (e) { console.error(e); } current = null; }
     const root = document.getElementById('view');
     IDE.clear(root);
-    IDE.clear(document.getElementById('modal-root'));      // diálogo aberto não sobrevive à troca de tela
+    IDE.closeModals();                                       // diálogo aberto não sobrevive à troca de tela (close(): onClose roda e o listener de teclado sai)
     currentName = n;
     document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === n || (n === 'novo' && a.dataset.route === 'ambientes')));
     document.body.dataset.view = n;
@@ -141,8 +141,8 @@
       return h('article', { class: 'card env-card' + (running ? ' is-running' : ''), 'data-id': e.id },
         h('header', { class: 'env-head' },
           h('div', { class: 'env-ico' }, ic('car', 24)),
-          h('div', { class: 'env-title' }, h('h3', null, e.name),
-            h('div', { class: 'env-sub' }, [e.chassis, IDE.brandName(e.brand), e.model_name].filter(Boolean).join(' · '))),
+          h('div', { class: 'env-title' }, h('h3', null, IDE.raw(e.name)),
+            h('div', { class: 'env-sub' }, IDE.raw([e.chassis, IDE.brandName(e.brand), e.model_name].filter(Boolean).join(' · ')))),
           IDE.badge(bt, bk)),
         h('dl', { class: 'kv' },
           h('div', null, h('dt', null, 'iDrive'), h('dd', null, IDE.genName(e.kind === 'cic' ? 'id4' : e.kind === 'mgu7' ? 'id7' : e.kind === 'mgu22' ? 'id8' : String(c.hmi_version || '').startsWith('id5') ? 'id5' : 'id6') + (e.kind === 'mgu7' ? ' · ' + IDE.t(e.role === 'rse' ? 'banco traseiro (RSE)' : 'tela central') : ''))),

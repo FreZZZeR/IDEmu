@@ -2,7 +2,7 @@
 /* IDEmu – ferramentas do ambiente: decodificador de VIN (assistente e ambientes prontos) e navegador dos arquivos do sistema do iDrive. */
 (function (IDE) {
   const { h, ic, api, post, toast, toastErr } = IDE;
-  const GEN_NAME = { id4: 'iDrive 4', id5: 'iDrive 5', id6: 'iDrive 6', id7: 'iDrive 7', id8: 'iDrive 8' };
+  const GEN_NAME = { id4: 'CIC', id5: 'iDrive 5', id6: 'iDrive 6', id7: 'iDrive 7', id8: 'iDrive 8' };
   IDE.genName = (g) => GEN_NAME[g] || '–';
 
   /* ------------------------------------------------------------------ VIN */

@@ -215,7 +215,7 @@ class Idrive7ServerTest(CodingBase):
         src = open(os.path.join(ROOT, 'idemu', 'server.py')).read()
         self.assertIn("dict(coding7.DEFAULT_HU)", src)
 
-    def test_coding_info_works_for_idrive7_and_not_for_idrive4(self):
+    def test_coding_info_works_for_idrive7_and_not_for_cic(self):
         a = server.App.__new__(server.App); a.rt = None; a.flashes = {}; a.builds = {}
         a.load_env = lambda eid: dict(self.env, kind=self.env_kind); a.env_dir = lambda eid: self.tmp.name
         self.env_kind = 'mgu7'; d = a.coding_info('x'); self.assertGreater(len(d['params']), 0); self.assertFalse(d['running'])

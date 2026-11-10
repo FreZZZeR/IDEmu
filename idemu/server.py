@@ -1,5 +1,5 @@
 """Servidor HTTP local do IDEmu (API em docs/API.md + arquivos estáticos da GUI web)."""
-import os, re, json, time, shutil, threading, traceback, mimetypes, datetime
+import os, re, subprocess, json, time, shutil, threading, traceback, mimetypes, datetime
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from . import catalog, builder, runtime, codegen, coding, coding7, coding8, stats, mgu, mgu7, phone, cluster, cic, vin, sysfiles
@@ -116,9 +116,9 @@ class App:
                               'extra': {} if rse else dict(coding7.DEFAULT_HU)}, 'net': {}}
             return self._save_new(env, d.get('home'))
         if d.get('kind') == 'cic':
-            if not catalog.packages_ok('cic'): raise ApiError('o iDrive 4 precisa dos pacotes swfl_000003a6 e swfl_00000417 (versão 008_090_002)')
+            if not catalog.packages_ok('cic'): raise ApiError('o CIC precisa dos pacotes swfl_000003a6 e swfl_00000417 (versão 008_090_002)')
             env = {'id': eid, 'name': name, 'created': datetime.datetime.now().isoformat(timespec='seconds'), 'kind': 'cic', 'series': 'E90', 'chassis': 'CIC', 'brand': 'bmw',
-                   'model_name': d.get('model_name') or 'BMW CIC High (iDrive 4)', 'swfl': {}, 'coding': {'language': 'de_DE', 'units': 'metric', 'country': 'DE', 'vin': dvin, 'display': '1280x480', 'hmi_version': 'id4', 'navi': ''}, 'net': {}}
+                   'model_name': d.get('model_name') or 'BMW CIC High', 'swfl': {}, 'coding': {'language': 'de_DE', 'units': 'metric', 'country': 'DE', 'vin': dvin, 'display': '1280x480', 'hmi_version': 'id4', 'navi': ''}, 'net': {}}
             return self._save_new(env, d.get('home'))
         if d.get('kind') == 'mgu22':
             if not catalog.packages_ok('mgu22'): raise ApiError('faltam arquivos do iDrive 8: escolha-os (ou a pasta) na etapa de arquivos')
@@ -191,7 +191,7 @@ class App:
         if b and b['state'] == 'building': raise ApiError('já compilando')
         if (self.flashes.get(eid) or {}).get('state') == 'running': raise ApiError('aguarde a gravação da codificação terminar')
         k = env.get('kind')
-        if k:                                          # iDrive 4, 7 e 8: a imagem é compartilhada entre os ambientes da geração
+        if k:                                          # CIC, iDrive 7 e 8: a imagem é compartilhada entre os ambientes da geração
             if (k == 'mgu22' and mgu.image_ready()) or (k == 'mgu7' and mgu7.image_ready()) or (k == 'cic' and cic.image_ready()):
                 self.builds.pop(eid, None); return
             for oid, ob in self.builds.items():
@@ -287,7 +287,7 @@ class App:
     # ---- codificação (coding) ----
     def coding_info(self, eid):
         env = self.load_env(eid)
-        if env.get('kind') == 'cic': raise ApiError('a edição de codificação ainda não existe para o iDrive 4')
+        if env.get('kind') == 'cic': raise ApiError('a edição de codificação ainda não existe para o CIC')
         try: d = coding7.describe(env, self.env_dir(eid)) if env.get('kind') == 'mgu7' else coding8.describe(env, self.env_dir(eid)) if env.get('kind') == 'mgu22' else coding.describe(env, self.env_dir(eid))
         except Exception as e: raise ApiError('não foi possível ler os parâmetros de codificação: %s' % e, 500)
         d['running'] = bool(self.rt and self.rt.id == eid and self.rt.state in ('booting', 'running'))
@@ -301,7 +301,7 @@ class App:
     def _flash(self, eid, changes=None, note='', reset=False, restore=None):
         """Grava a codificação: backup -> aplica -> regenera shim.img -> reinicia a head unit (se estiver ligada) -> confere que o HMI leu a tabela nova."""
         env = self.load_env(eid); env.pop('build', None); env.pop('snapshot', None)
-        if env.get('kind') == 'cic': raise ApiError('a gravação de codificação ainda não existe para o iDrive 4')
+        if env.get('kind') == 'cic': raise ApiError('a gravação de codificação ainda não existe para o CIC')
         if env.get('kind') in ('mgu7', 'mgu22'): return self.flash7(eid, env, changes, note, reset, restore)
         if self.build_info(eid)['state'] != 'ready': raise ApiError('compile o ambiente antes de gravar a codificação')
         if (self.flashes.get(eid) or {}).get('state') == 'running': raise ApiError('já existe uma gravação em andamento')
@@ -622,6 +622,18 @@ class H(BaseHTTPRequestHandler):
                     from urllib.parse import quote
                     return 200, body, ctype, {'Content-Disposition': "%s; filename*=UTF-8''%s" % (disp, quote(name))}
                 raise ApiError('rota desconhecida', 404)
+            if act == 'userfiles':
+                env = A.load_env(eid)
+                if env.get('kind') != 'cic': raise ApiError('arquivos do usuário só existem para o CIC', 400)
+                dd = cic.userfiles_dir(A.env_dir(eid))
+                if len(P) > 3 and P[3] == 'reveal':
+                    if m != 'POST': raise ApiError('use POST', 405)
+                    os.makedirs(dd, exist_ok=True)
+                    r = subprocess.run(['open', dd], capture_output=True, text=True)
+                    if r.returncode: raise ApiError('não consegui abrir a pasta: %s' % r.stderr.strip()[:160], 500)
+                    return {'ok': True}
+                fl = cic.userfiles_list(A.env_dir(eid))
+                return {'dir': dd, 'mount': '/mnt/EFS_RO', 'files': fl, 'bytes': sum(f['size'] for f in fl)}
             if act == 'build' and m == 'POST': A.start_build(eid); return {'ok': True}
             if act == 'build':
                 A.load_env(eid); b = A.builds.get(eid); i = A.build_info(eid)
@@ -733,6 +745,7 @@ class H(BaseHTTPRequestHandler):
             except OSError as e:
                 raise ApiError('não consegui abrir as portas %s e %s para o celular (%s)' % (phone.HTTP_PORT, phone.HTTPS_PORT, e.strerror or e), 409)
             return ph.state()
+        if P[0] in ('vehicle', 'most'): return self.api_vehicle(m, path, q, d)
         if P[0] == 'can': return self.api_can(m, path, q, d)
         if P[0] == 'gps': return self.api_gps(m, path, q, d)
         if path == 'ssh/info':
@@ -740,6 +753,19 @@ class H(BaseHTTPRequestHandler):
             if not rt.ssh: return {'port': rt.env.get('net', {}).get('ssh_port'), 'host': '127.0.0.1', 'user': '', 'key_path': '', 'command': '', 'state': 'down', 'note': 'SSH ainda não iniciado'}
             return rt.ssh.info()
         raise ApiError('rota desconhecida: ' + path, 404)
+    def api_vehicle(self, m, path, q, d):
+        rt = APP.need_rt()
+        if getattr(rt, 'kind', None) != 'cic': raise ApiError('o veículo virtual por MOST/IOC só existe para o CIC', 400)
+        if path == 'vehicle/state': return rt.vehicle_state()
+        if m != 'POST' and path in ('vehicle/set', 'most/send'): raise ApiError('use POST', 405)
+        try:
+            if path == 'vehicle/set':
+                for k, v in d.items(): rt.set_vehicle(k, v)
+                return rt.vehicle_state()
+            if path == 'most/send': rt.most_send(d.get('hex', '')); return {'ok': True}
+        except ValueError as e: raise ApiError(str(e), 400)
+        if path == 'most/seen': return {'fblocks': rt.most_seen()}
+        raise ApiError('rota desconhecida', 404)
     def api_can(self, m, path, q, d):
         can = APP.need_can()
         if path == 'can/signals': return can.snapshot()

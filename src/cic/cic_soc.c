@@ -106,13 +106,18 @@ static DeviceState *cic_scif(MemoryRegion *sysmem, hwaddr base, int idx,
 {
     DeviceState *dev = qdev_new("cic-scif");
     SysBusDevice *sb = SYS_BUS_DEVICE(dev);
-    qdev_prop_set_chr(dev, "chardev", serial_hd(idx));
+    if (serial_hd(idx)) {
+        qdev_prop_set_chr(dev, "chardev", serial_hd(idx));
+    }
+    qdev_prop_set_bit(dev, "single-irq", eri == 0);     /* eri = 0: só o vetor txi (SCIF2) */
     sysbus_realize_and_unref(sb, &error_fatal);
     cic_map_dual(sysbus_mmio_get_region(sb, 0), base);
-    qdev_connect_gpio_out_named(dev, "eri", 0, intc.irqs[eri]);
-    qdev_connect_gpio_out_named(dev, "rxi", 0, intc.irqs[rxi]);
+    if (eri) {
+        qdev_connect_gpio_out_named(dev, "eri", 0, intc.irqs[eri]);
+        qdev_connect_gpio_out_named(dev, "rxi", 0, intc.irqs[rxi]);
+        qdev_connect_gpio_out_named(dev, "bri", 0, intc.irqs[bri]);
+    }
     qdev_connect_gpio_out_named(dev, "txi", 0, intc.irqs[txi]);
-    qdev_connect_gpio_out_named(dev, "bri", 0, intc.irqs[bri]);
     return dev;
 }
 
@@ -138,6 +143,8 @@ void cic_soc_init(MemoryRegion *sysmem, SuperHCPU *cpu, MachineState *machine)
 
     cic_scif(sysmem, 0xffea0000, 0, SCIF0_ERI, SCIF0_RXI, SCIF0_BRI, SCIF0_TXI);
     cic_scif(sysmem, 0xffeb0000, 1, SCIF1_ERI, SCIF1_RXI, SCIF1_BRI, SCIF1_TXI);
+    /* SCIF2: terceira UART (vetor único 0x980); o IDEmu a usa para o log do slog (/dev/ser3) e deixa a SCIF0 (/dev/ser2) para o GPS */
+    cic_scif(sysmem, 0xffec0000, 2, 0, 0, 0, SCIF2);
 
     {
         /*

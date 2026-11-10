@@ -1,10 +1,10 @@
-# iDrive 4, 5, 7 e 8: o que foi testado (2026-11-07)
+# CIC, iDrive 5, 7 e 8: o que foi testado (2026-11-07)
 
 Pacotes: `~/Downloads/System files`, cópias da PSdZData. Nenhum deles é alterado.
 
 | Geração | Pacotes | Plataforma | Resultado |
 |---|---|---|---|
-| iDrive 4 | CIC High "BMW L6" 008_090_002 (Harman) | SH7785 (SH-4A), QNX 6.3.2 | **Roda no IDEmu com a interface real** (Hauptmenü) numa placa SH7785 nova do QEMU, ≈ 70 s de boot; **rotor, aperto, inclinação e teclas** por um controlador MOST virtual injetado no HmiMain. Ver `docs/IDRIVE4.md` |
+| CIC | CIC High "BMW L6" 008_090_002 (Harman) | SH7785 (SH-4A), QNX 6.3.2 | **Roda no IDEmu com a interface real** (Hauptmenü) numa placa SH7785 nova do QEMU, ≈ 70 s de boot; **rotor, aperto, inclinação e teclas** por um controlador MOST virtual injetado no HmiMain. Ver `docs/CIC.md` |
 | iDrive 5 | NBT Evo 007_051_002, os mesmos do iDrive 6 | OMAP5, QNX 6.5 | **Interface real roda no IDEmu**, com quedas do HMI nos menus de navegação. `HMI_ID_VERSION=id5` |
 | iDrive 7 | `HU_MGU_01` 036_010_004 (kernel e sistema) + `RSE_MGU_01` 030_016_002 (**`HmiMain3D`/RAMSES e dados do HMI**) | Intel Apollo Lake, Linux 4.14, x86-64 | **A tela central (HU_HMI) e a do banco traseiro (RSE) desenham e respondem a toque, rotor e botões** (≈ 3,5 min de boot); falta o conteúdo (mídia, telefone, navegação). Ver as seções abaixo |
 | iDrive 8 | `MGU_02_*` 007_034_003 e 009_020_028 | Qualcomm SA8155, Linux 5.15, ARM64 | **Roda no IDEmu com interface real, toque e rotor**; sem mapa nem sinais do carro |
@@ -275,3 +275,19 @@ A aba **Coding** agora abre para ambientes iDrive 8, com 1.264 parâmetros do CA
 * **Verificado** no ambiente `idrive-8-g70`: `DEVELOPER_MENU=0` + reset → o menu **All apps** perde "Developer Info" e "Color Configuration"; voltar ao padrão traz de volta. `CID_TOUCH=0` **não** desliga o toque no iDrive 8 (o toque entra pelo `uinput` e o HMI não olha esse parâmetro), ao contrário do iDrive 7.
 * Os valores de fábrica do dicionário batem com a tabela que o `libcod` já lia (teste `tests/test_idrive8_coding.py`).
 * Limite: o efeito de cada parâmetro depende dos serviços que o HMI encontra; muitos parâmetros `EXBOX_*` só aparecem com a central de carroceria, que não existe aqui.
+
+### iDrive 7: SSH (2026-11-10)
+O shell do guest (`ttyS2`, o mesmo em que `run_guest` roda comandos) agora também vira `shell.sock` (`runtime.ConsoleMux`: o chardev do QEMU só aceita um cliente, então o `_console_thread` é quem alimenta os clientes) e a aba **SSH** abre uma sessão `root`:
+`ssh -F <ambiente>/ssh/ssh_config idemu 'uname -sr'` → `Linux 4.14.300-apl`, 0,2 s por comando, também com o boot rápido (snapshot). Sem rede no guest: nada de scp/sftp (`idemu push/pull` pelo shell).
+
+### iDrive 7: relógio parado no boot rápido (2026-11-10)
+Com um snapshot antigo o relógio do HMI aparecia parado (hora do snapshot) e depois como `--:--`: no guest restaurado **não havia o processo `idemu-fakesvc`** (quem alimenta o relógio,
+`KombiIF.statusShowTimeDate`, a cada 5 s pelo init, e os serviços do carro). Numa partida a frio o processo vive e o relógio anda; o snapshot de 2026-11-09 foi tirado depois que ele sumiu e congelou o problema
+em todo boot rápido. Agora `_take_snapshot` confere (`ps`) se o `idemu-fakesvc` está rodando e, se não estiver, adia o snapshot para o próximo boot (as mensagens vão para o log do app).
+Verificado: snapshot novo → boot rápido em 1,6 s, `idemu-fakesvc` vivo, o contador de `set statusShowTimeDate` no `/tmp/fakesvc.log` sobe de 26 para 30 em 20 s e o HMI mostra a hora certa.
+Cuidado ao depurar: `echo ... > /run/fakesvc.ctl` **trava o shell** do guest quando o processo não existe (abrir um FIFO só para escrita espera um leitor); use `1<>/run/fakesvc.ctl`.
+
+**Dados do carro (não feito, mas o caminho existe):** o `idemu-fakesvc` aceita `set <campo> <hex>` ao vivo em `/run/fakesvc.ctl` e o pacote traz o `someip-interfaces.json` (689 interfaces, com os
+tipos de cada campo). Campos que valem tentar: `TPMS.statusTyrePressure`/`statusTyreTemperature` (4 × UInt16), `CDS.statusGearIndicator`, `statusEngineSpeed2`, `statusHandBrake`,
+`statusEngineTemperature`, `KombiIF.timeDateUTC`. Falta saber a escala e em que tela do HMI aparecem (o toque na tela central depende da codificação, e as setas do controlador não
+saíram do cartão MEDIA no teste). Obtenha o JSON com `ssh ... cat /etc/oap/someip/someip-interfaces.json` (o leitor `ext4ls.py` devolve zeros no fim desse arquivo).

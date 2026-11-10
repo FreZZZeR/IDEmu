@@ -1,5 +1,5 @@
 /*
- * IDEmu: BMW CIC High (iDrive 4, Harman "BMW L6") — placa mínima para o QNX 6.3 / SH7785.
+ * IDEmu: BMW CIC High (CIC, Harman "BMW L6") — placa mínima para o QNX 6.3 / SH7785.
  *
  * Base: hw/sh4/sh7750.c (registros da CPU, TLB mapeado) + periféricos on-chip do SH7785.
  * O hardware da placa que o QEMU não tem (FPGA, Carmine, V850...) vai sendo adicionado
@@ -197,6 +197,14 @@ static int hexv(int c)
 static void cic_input_line(char *s)
 {
     Tel t = { 0 };
+    if (s[0] == 'v' && s[1] == ' ') {                  /* "v <décimos de volt>": tensão da bateria na IOC (canal 2) */
+        cic_ioc_volt = (int)strtol(s + 2, NULL, 10);
+        qemu_log_mask(LOG_UNIMP, "cic: tensão da bateria %d,%d V\n", cic_ioc_volt / 10, cic_ioc_volt % 10);
+        if (in_dbg) {
+            fprintf(stderr, "cic: tensão da bateria %d,%d V\n", cic_ioc_volt / 10, cic_ioc_volt % 10);
+        }
+        return;
+    }
     if (s[0] != 't' || s[1] != ' ') {
         return;
     }
@@ -411,7 +419,7 @@ static void cic_init(MachineState *machine)
 
 static void cic_machine_init(MachineClass *mc)
 {
-    mc->desc = "BMW CIC High (iDrive 4, Harman L6) - SH7785";
+    mc->desc = "BMW CIC High (CIC, Harman L6) - SH7785";
     mc->init = cic_init;
     mc->default_cpu_type = TYPE_SH7785_CPU;
     mc->default_ram_size = 256 * MiB;

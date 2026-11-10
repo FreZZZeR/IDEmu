@@ -69,7 +69,7 @@ regrava a codificação, reinicia a head unit e confere que o HMI leu a tabela n
   O VIN não traz a lista de opcionais, então o tipo de head unit é escolhido à parte.
 * **Tipo de head unit (iDrive 5/6)**: Navigation Professional (10,25" 1440×540, toque), Navigation Business (8,8" 1280×480) ou EntryNav (6,5" 800×480, só o controlador).
   A PSdZData traz só o firmware do HU_NBTEVO: os três usam esse firmware com a codificação de display, navegação e toque de cada unidade.
-* **Arquivos**: o botão **Arquivos** descompacta os pacotes SWFL/HAR (ou a imagem montada do iDrive 8 e do iDrive 4) em arquivos normais, que você navega no app,
+* **Arquivos**: o botão **Arquivos** descompacta os pacotes SWFL/HAR (ou a imagem montada do iDrive 8 e do CIC) em arquivos normais, que você navega no app,
   vê (texto, imagem ou hexadecimal), baixa ou abre no Finder.
 
 ## Estado e limites (resumo honesto)
@@ -83,8 +83,8 @@ Toque na tela (clicar e arrastar) funciona no iDrive 5, 6 e 8 (`docs/TOQUE.md`).
 A aba **Cluster e HUD** (iDrive 5 e 6) desenha o painel de instrumentos e o HUD com o CAN e o GPS virtuais (`docs/CLUSTER_HUD.md`). Em Novo ambiente, cada versão do iDrive mostra o seu nível de funcionalidade e você escolhe a pasta onde a VM fica.
 Ainda **não** feito: as demais grandezas do carro no HMI (pneus, câmbio, combustível…),
 mapa e rota (o PSdZData não traz dados de mapa), áudio, rede no guest, pen drive virtual (`docs/PENDRIVE.md`).
-**iDrive 4** (CIC High, SH-4/QNX 6.3) também está no assistente: mostra a interface real do HMI e aceita rotor, aperto, inclinação e as teclas do controlador (`docs/IDRIVE4.md`).
-**iDrive 4, 7 e 8** também são gerações do assistente. Para elas o app lista os arquivos SWFL exigidos (com o nome exato): você copia o nome e escolhe o arquivo, escolhe vários de uma vez, ou aponta uma pasta e o app acha sozinho; a PSdZData inteira também serve. Os escolhidos ficam como links em `packages/swe/swfl`. (Elas lêem os arquivos direto da PSdZData; ver `docs/OUTRAS_GERACOES.md`): o iDrive 7 mostra a tela central ou a do banco traseiro, com toque, rotor, botões e editor de codificação (o iDrive 8 também tem o editor, com 1.264 parâmetros); o primeiro boot leva ≈ 2 min e os seguintes ≈ 1 s (snapshot).
+**CIC** (High, SH-4/QNX 6.3) também está no assistente: mostra a interface real do HMI e aceita rotor, aperto, inclinação e as teclas do controlador (`docs/CIC.md`).
+**CIC, iDrive 7 e 8** também são gerações do assistente. Para elas o app lista os arquivos SWFL exigidos (com o nome exato): você copia o nome e escolhe o arquivo, escolhe vários de uma vez, ou aponta uma pasta e o app acha sozinho; a PSdZData inteira também serve. Os escolhidos ficam como links em `packages/swe/swfl`. (Elas lêem os arquivos direto da PSdZData; ver `docs/OUTRAS_GERACOES.md`): o iDrive 7 mostra a tela central ou a do banco traseiro, com toque, rotor, botões e editor de codificação (o iDrive 8 também tem o editor, com 1.264 parâmetros); o primeiro boot leva ≈ 2 min e os seguintes ≈ 1 s (snapshot).
 Só uma versão do HMI foi validada. Detalhes em `docs/ARQUITETURA.md`.
 
 SSH: o login é o usuário local do Mac (não `root`); a interface mostra o comando pronto (aba SSH).
@@ -97,4 +97,4 @@ A tela Mapa do HMI mostra um mapa desenhado pelo IDEmu, que segue o GPS virtual.
 A aba **Celular** (tela Execução) liga uma página para o celular, na mesma rede Wi-Fi: ele vira a tela, o toque, o rotor e os botões da head unit, e o GPS do carro (posição do celular). Protegido por PIN. Bluetooth, CarPlay e Android Auto não existem na head unit emulada. Ver `docs/CELULAR.md`.
 
 ## Outras gerações
-iDrive 5 roda com os mesmos pacotes do iDrive 6, ainda com quedas do HMI nos menus de navegação: escolha a geração ao criar o ambiente. Ambientes antigos precisam ser recompilados antes. iDrive 8 roda com a interface real, toque e rotor: escolha **iDrive 8** em Novo ambiente (sem mapa nem sinais do carro). iDrive 7 mostra a tela central (HU) ou a do banco traseiro (RSE), com toque, rotor, botões e editor de codificação, sem mapa, mídia nem sinais do carro. iDrive 4 (CIC, SH-4A) mostra a interface real do HMI no app, ainda sem rotor nem teclas (`docs/IDRIVE4.md`). O toque funciona no iDrive 5, 6 e 8. Ver `docs/OUTRAS_GERACOES.md`.
+iDrive 5 roda com os mesmos pacotes do iDrive 6, ainda com quedas do HMI nos menus de navegação: escolha a geração ao criar o ambiente. Ambientes antigos precisam ser recompilados antes. iDrive 8 roda com a interface real, toque e rotor: escolha **iDrive 8** em Novo ambiente (sem mapa nem sinais do carro). iDrive 7 mostra a tela central (HU) ou a do banco traseiro (RSE), com toque, rotor, botões e editor de codificação, sem mapa, mídia nem sinais do carro. CIC (CIC High, SH-4A) mostra a interface real do HMI no app, ainda sem rotor nem teclas (`docs/CIC.md`). O toque funciona no iDrive 5, 6 e 8. Ver `docs/OUTRAS_GERACOES.md`.

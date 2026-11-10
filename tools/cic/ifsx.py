@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extrator de IFS QNX 6.3 (CIC / SH4) — iDrive 4.
+"""Extrator de IFS QNX 6.3 (CIC / SH4) — CIC.
 uso: ifsx.py pacote.bin [destino]   (imprime a árvore; com destino, extrai)"""
 import struct, sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))

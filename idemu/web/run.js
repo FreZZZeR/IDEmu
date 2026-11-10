@@ -283,7 +283,7 @@
     const ctx = { status: () => R.status, running: () => !!(R.status && R.status.state === 'running'), booted: () => !!(R.status && (R.status.state === 'running' || R.status.state === 'booting')) };
     function selectTab(id, persist = true) {
       if (R.activeTab && R.tabs[R.activeTab]) { R.tabs[R.activeTab].api.hide(); R.tabs[R.activeTab].host.hidden = true; }
-      R.activeTab = id; if (persist) IDE.pref.set('run.tab', id);      // a troca forçada (iDrive 4/7/8 só têm Logs) não apaga a aba preferida
+      R.activeTab = id; if (persist) IDE.pref.set('run.tab', id);      // a troca forçada (CIC/iDrive 7/8 só têm Logs) não apaga a aba preferida
       let t = R.tabs[id];
       if (!t) { const host = h('div', { class: 'tab-host' }); tabBody.appendChild(host); t = R.tabs[id] = { host, api: IDE.tabDefs[id].mount(host, ctx) }; }
       t.host.hidden = false; t.api.show(); if (R.status && t.api.onStatus) t.api.onStatus(R.status);
@@ -323,9 +323,10 @@
       const mgu = !!s.kind;     // iDrive 8: sem CAN, GPS, mapa, SSH, V850 nem editor de codificação por enquanto
       codingLink.style.display = s.kind === 'cic' ? 'none' : '';
       if (s.kind === 'cic' && img.width) dispSize.textContent = IDE.t('{w} × {h} · sem tela de toque (use o controlador)', { w: img.width, h: img.height });      // o iDrive 7 tem o editor de codificação
-      bootNote.textContent = IDE.t(s.kind === 'cic' ? 'O boot do iDrive 4 leva cerca de 1 minuto (emulação SH-4 sem aceleração).' : s.kind === 'mgu7' ? 'O primeiro boot do iDrive 7 leva cerca de 2 minutos (emulação x86 sem aceleração); os seguintes, cerca de 1 segundo.' : mgu ? 'O boot do iDrive 8 leva cerca de 1 minuto.' : 'O primeiro boot leva cerca de 45 segundos; os seguintes, cerca de 1 segundo.') + ' ';
-      tabBar.querySelectorAll('button').forEach((b) => { b.style.display = mgu && b.dataset.tab !== 'logs' && b.dataset.tab !== 'phone' ? 'none' : ''; });
-      if (mgu && R.activeTab !== 'logs' && R.activeTab !== 'phone') selectTab('logs', false);
+      bootNote.textContent = IDE.t(s.kind === 'cic' ? 'O boot do CIC leva cerca de 1 minuto (emulação SH-4 sem aceleração).' : s.kind === 'mgu7' ? 'O primeiro boot do iDrive 7 leva cerca de 2 minutos (emulação x86 sem aceleração); os seguintes, cerca de 1 segundo.' : mgu ? 'O boot do iDrive 8 leva cerca de 1 minuto.' : 'O primeiro boot leva cerca de 45 segundos; os seguintes, cerca de 1 segundo.') + ' ';
+      const shown = (t) => !mgu || t === 'logs' || t === 'phone' || (t === 'ssh' && (s.kind === 'cic' || s.kind === 'mgu7')) || (t === 'gps' && s.kind === 'cic');      // SSH: o CIC (ksh do QNX) e o iDrive 7 (shell do guest) têm console; GPS: o CIC tem um receptor ANTARIS virtual
+      tabBar.querySelectorAll('button').forEach((b) => { b.style.display = shown(b.dataset.tab) ? '' : 'none'; });
+      if (mgu && !shown(R.activeTab)) selectTab('logs', false);
       const env = s.env ? IDE.envById(s.env) : null;
       const envSig = env ? env.id + '|' + env.name + '|' + env.chassis : String(s.env);
       if (barEnv.dataset.sig !== envSig) {           // o status chega 4 vezes por segundo no boot: só refaz o cabeçalho quando o ambiente muda

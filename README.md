@@ -13,8 +13,8 @@ firmware packages, IDEmu builds the disk images locally.
 | **iDrive 6** (NBT Evo, 2016–2020) | OMAP5 board, QNX 6.5, ARM | **75% High** | Real HMI, touch, rotor and buttons, virtual CAN and GPS, cluster and HUD, connected phone, SSH, coding editor (1,333 parameters), V850 emulation, fast boot (~1 s) | Radio/media/audio, USB stick, some vehicle menu items |
 | **iDrive 5** (NBT / NBT Evo) | Same as iDrive 6 (same packages, `HMI_ID_VERSION=id5`) | **54% Medium** | Real HMI, touch, rotor, CAN, cluster and HUD, SSH, phone, coding editor | Maps, media, USB; the HMI crashes now and then in navigation menus; slow reaction to input |
 | **iDrive 8** (MGU22, BMW i7 G70) | Qualcomm SA8155 class, Linux 5.15, ARM64 (QEMU `virt` + HVF) | **46% Medium** | Real HMI at 2880×960, touch, rotor and buttons, phone screens, clock and temperature, coding editor (1,264 parameters), boot in ~25 s | CAN, maps/GPS, cluster, SSH, media, USB stick |
-| **iDrive 7** (MGU, Linux x86-64) | Intel Apollo Lake class, Linux 4.14, x86-64 (QEMU TCG) | **29% Low** | **Center screen (HU) and rear-seat entertainment screen (RSE)**, touch, rotor and buttons, coding editor (1,288 parameters), first boot ~2 min then ~1 s from a snapshot | CAN, GPS/maps, cluster, SSH, media, USB stick; many vehicle services are not faked yet |
-| **iDrive 4** (CIC High, "BMW L6") | SH7785 (SH-4A) board, QNX 6.3 | **17% Minimum** | Real HMI (Hauptmenü), rotor, push, tilt, MENU/BACK/OPTION/MEDIA/MAP keys | Touch (the CIC has none), CAN, GPS, SSH, coding editor, fast boot; NAV and COM keys do nothing; boot ~1 min |
+| **iDrive 7** (MGU, Linux x86-64) | Intel Apollo Lake class, Linux 4.14, x86-64 (QEMU TCG) | **38% Low** | **Center screen (HU) and rear-seat entertainment screen (RSE)**, touch, rotor and buttons, SSH (root shell), coding editor (1,288 parameters), first boot ~2 min then ~1 s from a snapshot | CAN, GPS/maps, cluster, media, USB stick; many vehicle services are not faked yet |
+| **CIC** (High, "BMW L6") | SH7785 (SH-4A) board, QNX 6.3 | **25% Low** | Real HMI (Hauptmenü), rotor, push, tilt, MENU/BACK/OPTION/MEDIA/MAP keys, SSH (QNX shell) | Touch (the CIC has none), CAN, maps (the virtual GPS receiver is detected and feeds the driver, but nothing shows without maps), coding editor, fast boot; NAV and COM keys do nothing; boot ~1 min |
 
 \* Functionality level as shown in the "New environment" assistant (average over 12 features). Maps and route guidance are not available on any
 system: the firmware packages do not carry map data and the navigation engine does not run.
@@ -60,7 +60,7 @@ New environment → iDrive version → car model → required files → paramete
 | `src/` | C sources: QEMU patches and boards, GL renderers, guest shims, V850 emulation |
 | `tools/` | Image builders, analysers and test helpers (`tools/mgu`, `tools/cic`, `tools/qemu`) |
 | `electron/` | Desktop wrapper |
-| `docs/` | Technical notes: [architecture](docs/ARQUITETURA.md), [API](docs/API.md), [other generations](docs/OUTRAS_GERACOES.md), [iDrive 4](docs/IDRIVE4.md), [touch](docs/TOQUE.md), [V850](docs/V850.md), [cluster and HUD](docs/CLUSTER_HUD.md) (in Portuguese) |
+| `docs/` | Technical notes: [architecture](docs/ARQUITETURA.md), [API](docs/API.md), [other generations](docs/OUTRAS_GERACOES.md), [CIC](docs/CIC.md), [touch](docs/TOQUE.md), [V850](docs/V850.md), [cluster and HUD](docs/CLUSTER_HUD.md) (in Portuguese) |
 | `tests/` | `python3 -m unittest discover -s tests` |
 
 ## License and legal

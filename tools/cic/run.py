@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sobe o CIC (iDrive 4) em segundo plano: console QNX no socket /tmp/cic/ser1.sock (SCIF1) e SCIF0 em arquivo.
+"""Sobe o CIC em segundo plano: console QNX no socket /tmp/cic/ser1.sock (SCIF1), log do slog em ser0.txt (SCIF2) e GPS (NMEA) em ser0.sock (SCIF0).
 uso: run.py [start|stop]   — depois: con.py 'comando' ..."""
 import os, subprocess, sys, time, signal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -11,7 +11,9 @@ D = os.environ.get('CIC_DIR', '/tmp/cic')
 
 FULL_BOOT = '''cp /usr/bin/memifs2 /tmp/memifs2
 slogger -s128 &
-sloginfo -w > /dev/ser2 2>&1 &
+devc-sersci -e -F -H -t0,48 -r60 -b57600 -c49500000/16 -u3 scif2 &
+waitfor /dev/ser3 10
+sloginfo -w > /dev/ser3 2>&1 &
 devf-generic -t10 -r -b9 -s0x0,128m,,,,,,1000,20 -p400,16 &
 waitfor /dev/fs0p0 10
 if waitfor /mnt/HBpersistence 3 2>/dev/null; then
@@ -37,7 +39,8 @@ memifs2 -D -L -C 8 -o 0x04d80000 /mnt/EFS_RO &
 waitfor /mnt/EFS_RO/fonts 30
 @IFS2@
 @IONET@
-srv-starter-QNX -c /etc/starter.cfg -vvv -g -u &
+# a saída dos processos do starter ia para o console (SCIF1) e se misturava com o shell (SSH): o log útil é o do slog em /dev/ser3
+srv-starter-QNX -c /etc/starter.cfg -vvv -g -u > /dev/null 2>&1 &
 '''
 
 FLASH_SEGS = [('swfl_000003a6.bin.008_090_002', [(0x280000, 4980736), (0x740000, 73662464), (0x4d80000, 33554432)]),
@@ -182,12 +185,15 @@ def qemu_cmd(D, run=None, qemu=None, debug_log=None, flash=None):
     debug_log: flags do -d (None = CIC_D ou 'guest_errors,unimp'; '' = sem log, bem mais rápido).
     flash: cópia gravável da flash.img para esta execução (sem ela usa D/flash.img com snapshot=on, que grava num qcow2 temporário)."""
     run = run or D
-    for f in ('ser1.sock', 'mon.sock'):
+    for f in ('ser0.sock', 'ser1.sock', 'mon.sock'):
         try: os.remove(os.path.join(run, f))
         except OSError: pass
     dl = os.environ.get('CIC_D', 'guest_errors,unimp') if debug_log is None else debug_log
     cmd = [qemu or QEMU, '-M', 'cic', '-m', os.environ.get('CIC_RAM', '384'), '-display', os.environ.get('CIC_DISPLAY', 'none'), '-monitor', 'unix:%s/mon.sock,server,nowait' % run,
-           '-serial', 'file:%s/ser0.txt' % run, '-chardev', 'socket,id=s1,path=%s/ser1.sock,server=on,wait=off,logfile=%s/ser1.log' % (run, run), '-serial', 'chardev:s1']
+           # SCIF0 (/dev/ser2) é a UART do GPS (o vdev-flexgps lê NMEA dela): socket sem log; SCIF1 (/dev/ser1) o console ksh; SCIF2 (/dev/ser3) o log do slog
+           '-chardev', 'socket,id=s0,path=%s/ser0.sock,server=on,wait=off' % run, '-serial', 'chardev:s0',
+           '-chardev', 'socket,id=s1,path=%s/ser1.sock,server=on,wait=off,logfile=%s/ser1.log' % (run, run), '-serial', 'chardev:s1',
+           '-serial', 'file:%s/ser0.txt' % run]
     if dl:
         cmd += ['-d', dl, '-D', run + '/log.txt'] + (['-dfilter', os.environ['CIC_FILTER']] if os.environ.get('CIC_FILTER') else [])
     drive = 'if=pflash,format=raw,file=%s' % flash if flash else 'if=pflash,format=raw,file=%s/flash.img,snapshot=on' % D

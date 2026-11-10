@@ -324,7 +324,7 @@
       codingLink.style.display = s.kind === 'cic' ? 'none' : '';
       if (s.kind === 'cic' && img.width) dispSize.textContent = IDE.t('{w} × {h} · sem tela de toque (use o controlador)', { w: img.width, h: img.height });      // o iDrive 7 tem o editor de codificação
       bootNote.textContent = IDE.t(s.kind === 'cic' ? 'O boot do CIC leva cerca de 1 minuto (emulação SH-4 sem aceleração).' : s.kind === 'mgu7' ? 'O primeiro boot do iDrive 7 leva cerca de 2 minutos (emulação x86 sem aceleração); os seguintes, cerca de 1 segundo.' : mgu ? 'O boot do iDrive 8 leva cerca de 1 minuto.' : 'O primeiro boot leva cerca de 45 segundos; os seguintes, cerca de 1 segundo.') + ' ';
-      const shown = (t) => !mgu || t === 'logs' || t === 'phone' || (t === 'ssh' && (s.kind === 'cic' || s.kind === 'mgu7')) || (t === 'gps' && s.kind === 'cic');      // SSH: o CIC (ksh do QNX) e o iDrive 7 (shell do guest) têm console; GPS: o CIC tem um receptor ANTARIS virtual
+      const shown = (t) => !mgu || t === 'logs' || t === 'phone' || (t === 'ssh' && (s.kind === 'cic' || s.kind === 'mgu7' || s.kind === 'mgu22')) || (t === 'gps' && s.kind === 'cic') || t === 'cluster' || t === 'can';      // SSH: o CIC (ksh do QNX) e o iDrive 7 (shell do guest) têm console; GPS: o CIC tem um receptor ANTARIS virtual
       tabBar.querySelectorAll('button').forEach((b) => { b.style.display = shown(b.dataset.tab) ? '' : 'none'; });
       if (mgu && !shown(R.activeTab)) selectTab('logs', false);
       const env = s.env ? IDE.envById(s.env) : null;

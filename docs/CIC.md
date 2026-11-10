@@ -257,6 +257,9 @@ O que existe e o que foi medido (**o mapa dos sinais de veículo para o HMI aind
   | `ce.2` | c56 | | `cf.1` (HMI, servido por ele) | 200 |
 
   Sem registro, o HMI não pede nada fora do `E5` (0xCA.0 `0x247`, 0xD1.2, 0xD7, 0xD8, 0xD9 aparecem sozinhos). Nenhum tipo de mensagem MTP além do MOST (`[2]=2`) sai do HMI.
+* **O HMI reage a `Status` (medido em 2026-11-10):** depois do registro, um `Status` (OpType `0x0C`) de 1 byte (`01`) em todos os FktIDs de um FBlock muda a tela: `32.1` abre CD/Multimedia com
+  "Hinweis: Wird geprüft…" (CD), `40.1` acende "TP" no cabeçalho (rádio), `ed.1` acende o envelope (mensagem) e `24.1` tira a moldura de seleção do Hauptmenü. Os demais (`10`, `15`, `31`, `42`, `43`, `44`,
+  `be`, `ce`, `db`, `dc`, `df`, `e7`, `eb`) não mudaram a tela com 1 byte. Fahrzeuginfo e Einstellungen continuam cinza. Ou seja: `32`/`40` são o CD e o rádio, e o caminho para dados de rádio/CD na tela existe, falta o formato dos `Status`.
 * **Ainda não funciona:** anunciar todos esses FBlocks não habilita **Fahrzeuginfo** nem **Einstellungen**, que ficam cinza no Hauptmenü (medido: registro dos 27 FBlocks e 25 s de espera,
   rotor até Fahrzeuginfo e aperto). Falta responder com `Status` no formato certo de cada FktID, e esse formato só sai do código dos proxies `CPxyVehicle…` do `HmiMain` (desmontagem com
   `tools/cic/elfx.py`). Candidatos pelo número de funções e pelo nome do FBlock na lista acima: `e7`/`eb` (três instâncias com as mesmas funções), `d8`, `be`, `dc`, `ed`. Nenhum mapeamento

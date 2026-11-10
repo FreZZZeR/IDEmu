@@ -669,7 +669,7 @@ class H(BaseHTTPRequestHandler):
             return {'ok': True, 'registered': len(devs)}
         if path == 'cluster':                            # cluster (Kombi) e HUD virtuais: CAN + GPS + o que o HMI manda por MOST
             rt = A.need_rt()
-            if getattr(rt, 'kind', None) or not getattr(rt, 'can', None): raise ApiError('o cluster e o HUD só existem no iDrive 5 e 6 em execução', 409)
+            if not getattr(rt, 'can', None): raise ApiError('o cluster e o HUD só existem com um ambiente em execução', 409)
             v = getattr(rt, 'v850', None)
             return cluster.snapshot(rt.can, getattr(rt, 'gps', None), v.bridge if v else None)
         if path == 'v850/seen':                          # depuração: últimas mensagens Set/Get do HMI por (FBlock, instância, função)

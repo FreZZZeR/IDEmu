@@ -254,7 +254,7 @@ class CicRuntime(runtime.Runtime):
         from . import gps, antaris
         self._gps_tx = None; self.antaris = None
         if os.environ.get('IDEMU_CIC_NOGPS'): return           # depuração: quem liga à ser0.sock é um script externo
-        self.gps = gps.GpsSim(tcp_port=self.env.get('net', {}).get('gps_port'))
+        self._start_sim()
         try: self._gpslog = open(os.path.join(self.logd, 'gps.log'), 'a')
         except OSError: self._gpslog = None
         def log(m):
@@ -263,7 +263,6 @@ class CicRuntime(runtime.Runtime):
                 except (OSError, ValueError): pass
         self.antaris = antaris.Antaris(self.gps, self._gps_send, log=log)
         self.gps.on_nmea(lambda ln: self.antaris.polled and self._gps_send(ln))      # NMEA só depois que o driver identificou o módulo (MON-VER)
-        self.gps.start()
         threading.Thread(target=self._gps_connect, daemon=True).start()
 
     def _most_log(self, m):

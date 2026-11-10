@@ -44,7 +44,7 @@ POST /api/env/<id>/start {"cold":false} -> {"ok":true}   (cold=true ignora o est
 POST /api/env/<id>/snapshot/delete -> {"ok":true}   (apaga o estado do boot rápido; Env traz "fast_boot" e "snapshot":{valid,size,enabled}; update aceita fast_boot)
 POST /api/env/<id>/delete -> {"ok":true}       POST /api/env/<id>/duplicate {"name":"..."} -> Env
 
-As ações que mudam algo (`update`, `start`, `stop`, `delete`, `duplicate`, `snapshot`, `vin`, `files/*`) só aceitam POST. A API recusa (403) pedidos com `Host` que não seja
+As ações que mudam algo (`update`, `start`, `stop`, `delete`, `duplicate`, `snapshot`, `vin`, `files/*`, `userfiles/reveal`, `vehicle/set`, `most/send`) só aceitam POST. A API recusa (403) pedidos com `Host` que não seja
 `127.0.0.1`/`localhost` na porta do servidor, com `Origin` de outro site ou `Sec-Fetch-Site: cross-site` (proteção contra CSRF e DNS rebinding).
 No iDrive 5/6, `coding.hu_variant` é o tipo de head unit: `professional` (10,25" 1440×540, navegação, toque), `business` (8,8" 1280×480) ou `entrynav` (6,5" 800×480, sem toque).
 O catálogo traz a lista em `hu_variants`; a PSdZData só tem o firmware do NBT Evo, então os três são o mesmo firmware com codificação diferente.
@@ -59,9 +59,15 @@ POST /api/env/<id>/vin {"vin":"...", "hu_variant":"business"?} -> {env, decode, 
 ## Arquivos do sistema
 GET  /api/env/<id>/files/status -> {state:"none|extracting|ready|error", pct, step, error, path, files, bytes, source}
 POST /api/env/<id>/files/extract -> status   (assíncrono; iDrive 5/6: os três SWFL do ambiente em <env>/system_files/{os,brand,hmi}; iDrive 7: os pacotes HAR em mgu7/system_files/{root,kernel};
-     iDrive 8: a raiz montada (mgu22/base.cpio) em mgu22/system_files/root; iDrive 4: o IFS de boot e o EFS_RO em cic/system_files/{IFS,EFS_RO})
+     iDrive 8: a raiz montada (mgu22/base.cpio) em mgu22/system_files/root; CIC: o IFS de boot e o EFS_RO em cic/system_files/{IFS,EFS_RO})
 GET  /api/env/<id>/files?path=<relativo> -> {path, parent, root, entries:[{name, dir, size, mode, link?}], status}
 GET  /api/env/<id>/files/raw?path=<relativo>[&inline=1] -> o arquivo (até 64 MB; HTML, XML, JS e SVG do firmware vão como text/plain)
+GET  /api/env/<id>/userfiles -> {dir, mount:"/mnt/EFS_RO", files:[{path,size}], bytes}   (só CIC: o conteúdo de <env>/userfiles/ entra no EFS_RO do guest a cada partida)
+POST /api/env/<id>/userfiles/reveal -> {"ok":true}   (cria a pasta e abre no Finder)
+GET  /api/vehicle/state -> {signals:{battery_voltage:13.8}, supported:{battery_voltage:{unit:"V",min:6,max:16}}}   (CIC em execução; o resto dos sinais ainda não foi mapeado)
+POST /api/vehicle/set {"battery_voltage":13.8} -> state   (tensão da bateria no status da IOC, canal 2; 400 se fora de 6..16 V ou sinal desconhecido)
+POST /api/most/send {"hex":"000c07010001000001" "02d801"} -> {"ok":true}   (telegrama MTP/MOST cru para o HMI do CIC; tamanho 0000 é preenchido)
+GET  /api/most/seen -> {fblocks:[{fblock,inst,subscribes:[FktID],telegrams:[{fkt,op,n,last}]}]}   (o que o HMI do CIC pediu a outros FBlocks; ver tools/cic/mostscan.py)
 POST /api/env/<id>/files/reveal {"path":"..."} -> abre no Finder        POST /api/env/<id>/files/remove -> apaga a pasta extraída
 Os caminhos são sempre relativos à pasta extraída: `..`, caminhos absolutos e links simbólicos que saiam dela são recusados.
 

@@ -81,6 +81,35 @@ class ShellMux:
                 if s: s.close()
             except Exception: pass
 
+class ConsoleMux(ShellMux):
+    """ShellMux de um console que outra parte do runtime já mantém aberto (o chardev do QEMU aceita um cliente só): `write(bytes)` manda ao guest e
+    `feed(bytes)` entrega a saída do guest aos clientes (SSH, shell.sock). Usado pelo CIC e pelo iDrive 7."""
+    def __init__(self, path, write):
+        ShellMux.__init__(self, None, path); self._write = write; self.up = True
+    def start(self):
+        try: os.unlink(self.path)
+        except OSError: pass
+        self.srv = socket.socket(socket.AF_UNIX); self.srv.bind(self.path); self.srv.listen(8)
+        threading.Thread(target=self._accept, daemon=True).start()
+    def _client(self, c):
+        try:
+            while not self.stop:
+                d = c.recv(4096)
+                if not d: break
+                self._write(d)
+        except OSError: pass
+        finally:
+            with self.lock:
+                if c in self.clients: self.clients.remove(c)
+            try: c.close()
+            except OSError: pass
+    def feed(self, d):
+        self.tail.append(d.decode('latin1', 'replace'))
+        with self.lock:
+            for c in list(self.clients):
+                try: c.sendall(d)
+                except OSError: self.clients.remove(c)
+
 class Qmp:
     """Cliente mínimo do QMP (monitor do QEMU)."""
     def __init__(self, path, timeout=30):
@@ -483,12 +512,17 @@ class Runtime:
             if os.environ.get('IDEMU_DATA_CHANNEL'): self.data = DataChannel(ser1, self.can, self.gps, self); self.data.start()
         except Exception as e:
             self.con.append('[idemu] CAN/GPS: %s' % e)
+        self._start_ssh()
+        if self.stop_ev.is_set(): self._kill_children()       # parado enquanto os serviços subiam
+
+    def _start_ssh(self):
+        """sshd sem root ligado ao shell.sock (console do guest)."""
         try:
-            self.ssh = sshbridge.SshBridge(self.env_dir, net.get('ssh_port', 2222), os.path.join(self.run, 'shell.sock'))
+            from . import sshbridge
+            self.ssh = sshbridge.SshBridge(self.env_dir, self.env.get('net', {}).get('ssh_port', 2222), os.path.join(self.run, 'shell.sock'))
             ok, msg = self.ssh.start(); self.con.append('[idemu] ssh: %s' % msg)
         except Exception as e:
             self.con.append('[idemu] SSH: %s' % e)
-        if self.stop_ev.is_set(): self._kill_children()       # parado enquanto os serviços subiam
 
     def _spawn(self, attr, *a, **kw):
         """Popen que não deixa processo órfão: com o ambiente já parado, não inicia; o processo novo fica em self.<attr> antes que stop() possa olhar."""

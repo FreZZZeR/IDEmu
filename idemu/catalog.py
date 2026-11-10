@@ -103,10 +103,9 @@ LEVEL_NOTES = {
             'usb': ('none', 'Sem controlador USB virtual'), 'stable': ('half', 'O HMI cai de vez em quando')},
     'id7': {'screen': ('half', 'Tela central e do banco traseiro (uma por ambiente); sem mapa, mídia nem dados do carro'), 'rotor': ('half', 'Rotor, setas, MENU, BACK, OPTION, MEDIA e COM funcionam; MAP e NAV não'),
             'can': ('none', 'Sem CAN virtual'), 'map': ('none', 'Sem GPS nem mapa'), 'cluster': ('none', 'Sem cluster nem HUD'), 'phone': ('half', 'Tela e toque; sem GPS'),
-            'coding': ('half', 'Edita 1.288 parâmetros e a VM reinicia para aplicar; o efeito depende dos serviços que o HMI ainda não encontra'), 'ssh': ('none', 'Sem acesso SSH'),
-            'media': ('none', 'Sem rádio nem áudio'), 'usb': ('none', 'Sem pen drive'), 'stable': ('half', 'O primeiro boot leva cerca de 2 minutos; os seguintes, cerca de 1 segundo')},
-    'id4': {'rotor': ('half', 'Rotor, aperto, inclinação, MENU, BACK, OPTION, MEDIA e MAP (rádio) funcionam; NAV e COM não; a tela leva alguns segundos para reagir'), 'touch': ('none', 'O CIC não tem tela de toque'), 'can': ('none', 'Sem CAN virtual'), 'map': ('none', 'Sem GPS nem mapa'), 'cluster': ('none', 'Sem cluster nem HUD'),
-            'phone': ('none', 'Sem celular'), 'coding': ('none', 'Sem editor de codificação'), 'ssh': ('none', 'Sem acesso SSH'), 'media': ('none', 'Sem rádio nem áudio'),
+            'coding': ('half', 'Edita 1.288 parâmetros e a VM reinicia para aplicar; o efeito depende dos serviços que o HMI ainda não encontra'), 'media': ('none', 'Sem rádio nem áudio'), 'usb': ('none', 'Sem pen drive'), 'stable': ('half', 'O primeiro boot leva cerca de 2 minutos; os seguintes, cerca de 1 segundo')},
+    'id4': {'rotor': ('half', 'Rotor, aperto, inclinação, MENU, BACK, OPTION, MEDIA e MAP (rádio) funcionam; NAV e COM não; a tela leva alguns segundos para reagir'), 'touch': ('none', 'O CIC não tem tela de toque'), 'can': ('none', 'Sem CAN virtual'), 'map': ('none', 'O receptor GPS virtual é detectado e entrega a posição ao driver (a navegação reporta fix 3D), mas o driver reinicia o receptor a cada ~15 s e sem mapas nada aparece na tela'), 'cluster': ('none', 'Sem cluster nem HUD'),
+            'phone': ('none', 'Sem celular'), 'coding': ('none', 'Sem editor de codificação'), 'media': ('none', 'Sem rádio nem áudio'),
             'usb': ('none', 'Sem pen drive'), 'stable': ('half', 'Boot de cerca de 1 minuto, sem boot rápido; vários serviços do carro ausentes')},
     'id8': {'can': ('half', 'Só relógio e temperatura são simulados'), 'map': ('none', 'Sem mapa nem GPS virtual'), 'cluster': ('none', 'Só a tela central é desenhada'),
             'phone': ('half', 'Tela, toque e botões; sem GPS'), 'coding': ('half', 'Edita 1.264 parâmetros e a VM reinicia para aplicar; o efeito depende dos serviços que o HMI ainda não encontra'), 'ssh': ('none', 'Sem acesso SSH'),
@@ -126,7 +125,7 @@ def level_of(gen_id):
 GENERATIONS = [
     {'id': 'id6', 'name': 'iDrive 6', 'sub': 'NBT Evo · 2016–2020 · QNX 6.5', 'hmi_version': 'id6_light', 'supported': True},
     {'id': 'id5', 'name': 'iDrive 5', 'sub': 'NBT / NBT Evo · usa os mesmos arquivos do iDrive 6', 'hmi_version': 'id5', 'supported': True},
-    {'id': 'id4', 'name': 'iDrive 4', 'sub': 'CIC High · Harman "BMW L6" · SH-4A + QNX 6.3 · lê os pacotes 3a6 e 417 da PSdZData', 'hmi_version': 'id4', 'supported': True, 'direct': 'cic'},
+    {'id': 'id4', 'name': 'CIC', 'sub': 'CIC High · Harman "BMW L6" · SH-4A + QNX 6.3 · lê os pacotes 3a6 e 417 da PSdZData', 'hmi_version': 'id4', 'supported': True, 'direct': 'cic'},
     {'id': 'id7', 'name': 'iDrive 7', 'sub': 'MGU · Linux x86 · tela central ou do banco traseiro (RSE) · lê os arquivos direto da PSdZData', 'hmi_version': 'id7', 'supported': True, 'direct': 'mgu7'},
     {'id': 'id8', 'name': 'iDrive 8', 'sub': 'MGU22 · Linux ARM64 · BMW i7 G70 · lê os arquivos direto da PSdZData', 'hmi_version': 'id8', 'supported': True, 'direct': 'mgu22'},
 ]
@@ -192,7 +191,7 @@ def build_catalog(psdz):
     return cat
 
 
-# ---------------------------------------------------------------- pacotes SWFL exigidos por geração (iDrive 4, 7 e 8)
+# ---------------------------------------------------------------- pacotes SWFL exigidos por geração (CIC, iDrive 7 e 8)
 # O usuário pode apontar a PSdZData inteira, escolher os arquivos um a um ou mandar o app procurar numa pasta.
 # Os arquivos escolhidos ficam como links em packages/swe/swfl (o "estágio"), que tem o mesmo formato de uma PSdZData para os montadores.
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -205,7 +204,7 @@ def required_packages(kind):
     from . import cic, mgu7
     if kind == 'cic':
         lab = {'000003a6': ('Sistema do CIC (aplicativos e HMI)', 'os'), '00000417': ('Dados do CIC (mapas, vozes e recursos)', 'data')}
-        return [{'id': i, 'version': cic.VERSION, 'label': lab[i][0], 'role': lab[i][1], 'help': 'Pacote do iDrive 4 (CIC)'} for i in cic.PKGS]
+        return [{'id': i, 'version': cic.VERSION, 'label': lab[i][0], 'role': lab[i][1], 'help': 'Pacote do CIC'} for i in cic.PKGS]
     if kind == 'mgu7':
         out = [{'id': '0000' + i, 'version': mgu7.APP_VER, 'label': 'Aplicativo %s' % i.upper(), 'role': 'app', 'help': 'Sistema e aplicativos do iDrive 7'} for i in mgu7.APP_IDS]
         out += [{'id': '0000' + i, 'version': mgu7.APP_VER, 'label': 'Dados %s' % i.upper(), 'role': 'data', 'help': 'Dados e recursos do iDrive 7'} for i in mgu7.DATA_IDS]

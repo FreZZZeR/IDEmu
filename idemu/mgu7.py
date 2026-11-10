@@ -232,6 +232,9 @@ class Mgu7Runtime(runtime.Runtime):
         tmp = self.snap_dir + '.tmp'
         try:
             self.snap_state = 'saving'; shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
+            if self.role == 'hu':          # o relógio e os serviços do carro vêm do idemu-fakesvc; um snapshot sem ele congelaria o relógio do HMI em todo boot rápido (visto em 2026-11-09)
+                alive = self.run_guest('ps | grep -c "[i]demu-fakesvc"', 15).strip().split('\n')[-1].strip()
+                if alive != '1': raise RuntimeError('o idemu-fakesvc não está rodando no guest (snapshot adiado para o próximo boot)')
             ok = False
             for _ in range(60):
                 self.hmp('stop')
@@ -372,15 +375,19 @@ class Mgu7Runtime(runtime.Runtime):
             except OSError: s.close(); s = None; time.sleep(0.1)
         if s is None: return
         self._con = s; log = open(os.path.join(self.logd, 'console.log'), 'wb'); tail = b''
+        if self.mux is None:                      # o shell do guest (ttyS2) também fica em shell.sock e no SSH
+            self.mux = runtime.ConsoleMux(os.path.join(self.run, 'shell.sock'), self._con_write); self.mux.start(); self._start_ssh()
         try:
             while not self.stop_ev.is_set():
                 d = s.recv(4096)
                 if not d: break
                 log.write(d); log.flush(); tail = (tail + d)[-400:]
+                if self.mux: self.mux.feed(d)
                 for m in re.finditer(rb'== start (\w+)', tail):
                     if self.state == 'booting': self.step = self.STEPS.get(m.group(1).decode(), self.step)
                 if b'== wl ready' in tail: self.wl_ready.set()
         except OSError: pass
+        finally: log.close()
     def _input_thread(self, path):
         """Liga ao socket da serial de entrada (ttyS0 do guest); só escreve nele (o guest não manda nada de volta)."""
         for _ in range(600):
@@ -404,6 +411,9 @@ class Mgu7Runtime(runtime.Runtime):
             if self._inp is None: return
             try: self._inp.sendall((line + '\n').encode())
             except OSError: self._inp = None
+    def _con_write(self, d):
+        with self._con_lock:
+            if self._con: self._con.sendall(d)
     def guest(self, cmd):
         """Comando no shell do guest (depuração); a saída vai para logs/console.log."""
         with self._con_lock:

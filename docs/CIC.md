@@ -1,6 +1,6 @@
-# iDrive 4 (CIC High, Harman "BMW L6") — estado em 2026-11-09
+# CIC (High, Harman "BMW L6") — estado em 2026-11-09
 
-**Atualização 2026-11-09 (2): roda no app.** Em **Novo ambiente → iDrive 4** o IDEmu cria um ambiente `kind: cic`; **Compilar** monta a imagem
+**Atualização 2026-11-09 (2): roda no app.** Em **Novo ambiente → CIC** o IDEmu cria um ambiente `kind: cic`; **Compilar** monta a imagem
 compartilhada em `<IDEmu>/cic` (`ifs.bin`, `flash.img`, `efs.ifs`, a partir de `swfl_000003a6` e `swfl_00000417` 008_090_002 da PSdZData; alguns
 segundos) e **Iniciar** sobe `bin/qemu-system-sh4` (`idemu/cic.py`). A tela do carro mostra o Hauptmenü real; o boot leva ≈ 70 s até `running`.
 * **Vídeo no app**: o QEMU grava a tela composta em `frame.rgb` (formato `IDFR` dos outros ambientes) quando `CIC_FRAME` está definido, no
@@ -42,7 +42,7 @@ segundos) e **Iniciar** sobe `bin/qemu-system-sh4` (`idemu/cic.py`). A tela do c
 
 
 **Atualização 2026-11-08 (noite): a GUI do HMI aparece.** O `HmiMain` fica vivo, o Root chega ao modo 4 (operação completa, `Executor state: Current=4`) e a tela
-mostra o **Hauptmenü** real (Radio / Fahrzeuginfo / Einstellungen, relógio `--:--`), captura em `docs/idrive4-hmi.png`. O que destravou, nesta ordem:
+mostra o **Hauptmenü** real (Radio / Fahrzeuginfo / Einstellungen, relógio `--:--`), captura em `docs/cic-hmi.png`. O que destravou, nesta ordem:
 1. **Crash aleatório do `devc-sersci`** (`SIGSEGV ip=88009162`): o handler de instrução ilegal do procnto faz `pref @spc` para carregar a TLB antes de uma janela com
    SSR/SPC/banco 1 já carregados; no QEMU o `PREF` não fazia nada, o TLB miss acontecia dentro da janela e destruía r1. Agora `PREF` privilegiado carrega a TLB (`build.sh`).
 2. **Por que o `HmiMain` saía**: a thread do `CHmiICProcUnit` (painel de instrumentos) não rodava porque `CHmiInstrumentClusterApp::init()` falhava em
@@ -54,7 +54,7 @@ mostra o **Hauptmenü** real (Radio / Fahrzeuginfo / Einstellungen, relógio `--
    (padrão 1) tira as duas chamadas de reset. `CIC_CLAMP` passou a ter padrão 1 (configuração testada).
 4. Depuração: o gdbstub esvazia o cache de tradução ao inserir breakpoint (`build.sh`), senão breakpoints reinseridos eram perdidos.
 
-**Atualização 2026-11-09: artefatos de desenho corrigidos.** Captura nova em `docs/idrive4-hmi.png` (sem retângulos brancos; aro cromado,
+**Atualização 2026-11-09: artefatos de desenho corrigidos.** Captura nova em `docs/cic-hmi.png` (sem retângulos brancos; aro cromado,
 moldura laranja de foco e "CD/Multimedia" corretos). O que era:
 * **Scanout** (`src/cic/cic_pci.c`): agora compõe as camadas L0..L5 do display 0 (registradores do MB86297: `Ln_EXT_MODE` bit 31 =
   ligada, `Ln_MODE_W_H`, `Ln_ORG_ADR`) sobre fundo preto com o alpha por pixel; `0x10008c` era o `L5_ORG_ADR`. O `libffb` não grava alpha
@@ -77,9 +77,9 @@ são emulados; (c) o boot até o HMI leva ~80 s de tempo do guest por causa dos 
 o `HmiMain` inicia e registra o displayable (`cid 256 1280x480`), mas **sai com EXIT_FAILURE ~4 s depois** (causa não achada; o log dele mostra só `GF CALL: gf_dev_select_zone id=2`
 e `MTP:Channel connect succeeded`), então a tela continua no splash. Dois problemas de estabilidade restam (ver "Pendências").
 
-**Resumo:** o iDrive 4 **já mostra vídeo no emulador**: a tela de abertura **BMW (splash)** do firmware original aparece em 1280x480, decodificada pelo
+**Resumo:** o CIC **já mostra vídeo no emulador**: a tela de abertura **BMW (splash)** do firmware original aparece em 1280x480, decodificada pelo
 `layermanager` e desenhada pelo `libffb` (renderizador por software do QNX) direto na VRAM do Carmine emulado. A **interface (HMI)** ainda **não** aparece:
-depois de `DM642::Loaded` o `CicHighEceUsaSecond`/HMI sobe e o sistema fica em CPU 100 % sem novos logs. Captura em `docs/idrive4-splash.png`; gerada com `python3 tools/cic/screen.py`.
+depois de `DM642::Loaded` o `CicHighEceUsaSecond`/HMI sobe e o sistema fica em CPU 100 % sem novos logs. Captura em `docs/cic-splash.png`; gerada com `python3 tools/cic/screen.py`.
 
 ## Como o vídeo chega à tela (resumo do que foi feito em 2026-11-08)
 * **Carmine** (`src/cic/cic_pci.c`): BAR2 = VRAM de 128 MB (RAM), BAR3 = registradores de 8 MB; janela PCI idêntica ao físico (o `build.sh` alarga o PPN da UTLB para 32 bits);
@@ -146,7 +146,7 @@ carregados por `dev-dspipc`. O aplicativo principal é `/usr/HBproject/CicHighEc
 
 ## O que já funciona
 * **Placa `cic` do QEMU 11.1.2** (`src/cic/`): SH7785 (modelo `sh7785` do QEMU), RAM em `0x08000000`, registradores da CPU/MMU, controlador de interrupções
-  **INT2** (tabela de vetores lida do próprio QNX), TMU (tick do sistema), duas SCIF (`cic_scif.c`, com a semântica de FIFO do SH7785, inclusive a contagem de RX
+  **INT2** (tabela de vetores lida do próprio QNX), TMU (tick do sistema), três SCIF (`cic_scif.c`; a SCIF2 vai para o log do slog, ver GPS), com a semântica de FIFO do SH7785, inclusive a contagem de RX
   em `+0x20`), **PCI** (`cic_pci.c`: ponte do SH7785 em `0xFE040000`, janela de memória PCI `0xD8000000..` → físico `0x18000000..`), **FPGA** Xilinx 10EE:7534
   (16 MB de registradores com log), **Carmine** 10CF:202B (só memória) e uma **NOR CFI de 128 MB** em `0x0` com IFS, IFS2, EFS_RO e HMI dos pacotes.
   Os periféricos on-chip aparecem em P4 (`0xE0000000+`) e no físico `0x1C000000+` (área 7), como no chip.
@@ -179,6 +179,89 @@ Variáveis de depuração do QEMU: `CIC_FPGA_INIT="off=val,..."` (valores inicia
 (depurador pelo gdbstub do QEMU, passo a passo), `bootinfo.py` (monta a imagem de boot e edita o IFS) e `qrun.py` (execução curta com log).
 O `run.py` troca a senha do root por `root`, o `login` por um `ksh`, o starter por `echo` e põe `PCIDMA_TEST_MODVER=1` no ambiente **na cópia em memória**;
 os pacotes não são alterados.
+
+## SSH e shell (2026-11-10)
+O console QNX (`ksh` na SCIF1, `ser1.sock`) agora também fica em `shell.sock` (`runtime.ShellMux`) e o `sshd` do IDEmu (`idemu/sshbridge.py`, a mesma aba **SSH** do iDrive 5/6) abre a sessão nele
+assim que o HMI está pronto. Testado: `ssh -F <ambiente>/ssh/ssh_config idemu 'uname -a'` → `QNX l6target 6.3.2 ... HB_SH7785 shle`. O firmware não tem `head`, `cksum` nem `base64`;
+o `ksh` responde devagar (a primeira linha leva alguns segundos na emulação SH-4).
+
+## Onde o tempo vai (medido em 2026-11-10, HMI parado no menu)
+`-d int` por 3 s no QEMU em regime: **≈ 45 000 exceções por segundo**, 63 % `tlb_miss` (≈ 28 000/s: a UTLB de 64 entradas com troca aleatória é pequena para o HMI), 29 % `trapa`
+(chamadas do QNX, ≈ 13 000/s), o resto `dtlb_miss_write`, `fpu_disable` (troca preguiçosa do contexto da FPU) e `illegal_instruction`. O QEMU fica em ≈ 100 % de CPU mesmo com a tela
+parada. Amostrar o PC pelo gdbstub **engana** (o QEMU só para em fronteiras de bloco e 93 % das amostras caem nos vetores de exceção); o que vale é o `sample` do macOS no processo do QEMU:
+o lado do QEMU gasta o tempo em `tlb_flush_page` (a cada LDTLB que sobrescreve uma entrada válida), `get_physical_address` e `tcg_tb_lookup` (a cada exceção).
+A latência do rotor é o desenho em software do HMI: o 1º quadro muda em 0,05 s, a animação termina em ≈ 3,4 s (8 medidas).
+
+**Tentativa que não deu certo: UTLB "sombra".** Uma tabela escondida de 192 entradas no QEMU recebia as entradas despejadas pelo LDTLB (sem exceção para o guest e sem
+`tlb_flush_page`). Foi preciso limpar a sombra a cada acesso por índice aos arrays da UTLB (o QNX varre a UTLB por índice para fazer flush por ASID e só enxerga as 64 entradas do hardware;
+sem isso o `ksh` morria com SIGSEGV no boot por tradução de um ASID reaproveitado). Medido com e sem (`CIC_SHADOW_UTLB=0`): o boot foi de 46,9 s para 57,3 s e a animação do rotor de 3,4 s
+para 3,9 s, ou seja, **mais lento**; o patch foi removido de `src/cic/build.sh`. O que sobra como caminho: um build sem `QOM_CAST_DEBUG` (`-Db_ndebug=true`) e menos `tlb_flush_page`.
+
+## GPS (2026-11-10)
+O `vdev-flexgps` lê o receptor **Atmel ATR0620 (ANTARIS 3, u-blox)** na `/dev/ser2` (SCIF0). O `run.py` usava essa UART para o log do `slog`, por isso o driver morria com
+"/dev/ser2 in use". Agora o log vai para a **SCIF2** (nova no QEMU, `0xffec0000`, vetor único `0x980`; no QNX `devc-sersci ... -u3 scif2` → `/dev/ser3`) e a SCIF0 é o socket `ser0.sock`,
+onde o IDEmu liga o receptor virtual (`idemu/antaris.py`, alimentado pelo `GpsSim`, a mesma aba **GPS** do iDrive 6):
+* **Identificação:** o driver pede o banner por `$GPTXT,01,01,02,EXT_GPSRESET`; o receptor responde `u-blox ag`, `ANTARIS ATR0620` e `ROM CORE 3.00` (o firmware 300 é o único com configuração
+  estática no driver; com `ATR062x`/4.00 ele não acha a configuração e reinicia em laço).
+* **Protocolo:** UBX `MON-VER` (resposta), `CFG-*` (ACK; o driver liga ~17 telegramas por `CFG-MSG`), telegramas cíclicos `NAV-POSLLH/STATUS/DOP/SOL/VELNED/TIMEUTC/CLOCK/SVINFO` e `MON-HW`
+  (60 bytes no firmware 300), mais o NMEA do simulador.
+* **Resultado:** o driver detecta, configura e a navegação (`ndr`) passa a reportar `new GPS fix = 3`. **Falta:** as classes UBX que o Atmel liga (`02/21`, `02/22`, `03/02..06`, `0c/0c`)
+  não são as do u-blox e o conteúdo é desconhecido (mando quadros vazios); o driver confere "11 telegramas por segundo" e reinicia o receptor a cada ~15 s
+  (`da Diskrepanz Ubx Telegramm Anzahl`). Um patch no IFS2 (`tools/cic/hmiinput.py`, `patch_flexgps`) faz a função `FlexGPS_Telegramm_observe` devolver sempre "ok", mas o gerente ainda
+  decide o reset por outro caminho (`0x08045ae0`, comparação com 1). Sem mapas nada aparece na tela. Ferramentas: `tools/cic/elfx.py` (strings, referências, desmontagem) em cima do ELF
+  extraído do IFS2; `environments/<id>/logs/gps.log` guarda o que o driver manda ao receptor.
+* O IFS de boot é refeito sozinho quando `run.py`, `bootinfo.py` ou `hmiinput.py` mudam (`cic.image_stale()` / `cic.rebuild_ifs()`, segundos), com o pacote de `build.json` ou o de
+  `~/Downloads/System files/ID4` se a PSdZData saiu do lugar.
+
+## Seus próprios apps no CIC (2026-11-10, proposta da issue #5)
+Qualquer arquivo pode entrar no guest em `/mnt/EFS_RO/`, o `imagefs` que o `memifs2` monta da flash NOR em `0x04D80000`:
+* **Onde:** `<IDEmu>/environments/<ambiente>/userfiles/`. O que estiver nessa pasta vira `/mnt/EFS_RO/<mesmo caminho>` a cada partida (`userfiles/hello/run.sh` → `/mnt/EFS_RO/hello/run.sh`).
+  O bit de execução, os links simbólicos e os subdiretórios valem; `.DS_Store` e outros nomes que começam com `.` ficam de fora. `GET /api/env/<id>/userfiles` lista o que entrará
+  e `POST /api/env/<id>/userfiles/reveal` abre a pasta no Finder. O console do app mostra `N arquivo(s) do usuário em /mnt/EFS_RO` ao iniciar.
+* **Como:** `idemu/cic.py:apply_userfiles` refaz o `imagefs` (pacote + seus arquivos, `tools/cic/efs.py:entries(extra=...)`) e o grava na **cópia da flash desta execução**; a imagem
+  compartilhada em `cic/` não muda e outros ambientes CIC não veem seus arquivos. Sem arquivos nada disso roda (a partida é a de antes). Um arquivo seu com o mesmo caminho de um do firmware o
+  **substitui** (o console avisa); trocar arquivo por diretório (ou o contrário) é recusado.
+* **Espaço:** o EFS_RO tem 49,4 MB até a partição `HBpersistence` e o firmware já usa 47,8 MB com 9 imagens de veículo `ResDB.vehicle-*` (≈ 1,3 MB cada, as de E90, F10, F30...). Os seus
+  arquivos entram primeiro e as imagens de veículo que não couberem são largadas (as menos prováveis primeiro: o E90 é a última a sair). Sem espaço mesmo sem elas, o app avisa e inicia sem os arquivos.
+* **Exemplo:** `examples/cic-hello/` (um `run.sh` que imprime o sistema e lista a pasta). Testado: `/mnt/EFS_RO/hello/run.sh` roda pelo SSH e o HMI sobe igual.
+* **Binários SH-4A:** o app compilado para o carro real roda no guest (é o mesmo QNX 6.3.2 e a mesma CPU). A compilação cruzada usa o QNX SDP **do próprio usuário** (nada dele é redistribuído) e
+  não foi reproduzida aqui por falta do SDP; o roteiro que o autor da issue usa fica para o PR dele.
+* **Desenho por cima do HMI** (relato da issue #5, **não verificado aqui**): o app se registra no `layermanager` (`lmgrRegisterDisplayable` → pinta o VFB de `lmgrGetVfb` →
+  `lmgrShowDisplayables` com o seu displayable → `lmgrUpdateVfb` a cada quadro; `lmgrUnregisterDisplayable` devolve o HMI), sem parar o `HmiMain`; no painel real um pixel de 32 bits chega
+  ao display como **A, B, G, R** (alpha primeiro) e os framebuffers do HMI são superfícies de 1280×480 com buffer duplo. O caminho do `devg-carmine` por software que o IDEmu já usa
+  (`CIC_SWDRAW`) atende esse desenho.
+
+## Dados do veículo (2026-11-10, proposta da issue #5)
+O que existe e o que foi medido (**o mapa dos sinais de veículo para o HMI ainda não está feito**):
+* **Tensão da bateria (IOC, canal 2, byte 5 do payload, décimos de volt): funciona.** O QEMU a publica a cada 250 ms (padrão 11,6 V = `0x74`; `CIC_VOLT=<décimos>` muda o padrão).
+  `POST /api/vehicle/set {"battery_voltage": 13.8}` (6,0 a 16,0 V) manda `v 138` ao `CIC_INPUT` e o valor vale até a próxima mudança (e é reenviado ao reiniciar o HMI). Verificado que o
+  comando chega ao QEMU (`CIC_INPUT_DEBUG=1`); **efeito visível na tela: nenhum achado** (o HMI não mostra a tensão e o Root não a registra no slog).
+  `GET /api/vehicle/state` devolve os sinais e os limites. O canal 5 da IOC (`ndr`: pulsos de velocidade, giro, marcha, esterçamento) **não** foi tocado: um segundo leitor no carro racha os quadros.
+* **O que o HMI pede por MOST (medido):** o HMI só assina um FBlock depois que ele aparece no registro MOST (*registry changed*, o mesmo telegrama que anuncia o controlador `E5.01`).
+  `tools/cic/mostscan.py` anuncia cada FBlock (instâncias 1, 2 e 3) e lê as assinaturas (`Notification.Set`, FktID `0x001`) que o HMI manda de volta; o envio do HMI agora é copiado ao IDEmu
+  para **todos** os FBlocks (antes só o `0xE5`) e fica em `environments/<id>/logs/most.log` e em `GET /api/most/seen`. `POST /api/most/send {"hex": "..."}` injeta um telegrama cru
+  (o tamanho `0000` é preenchido). Resultado na 008_090_002 (FBlock.instância → FktIDs assinados):
+
+  | FBlock | FktIDs | | FBlock | FktIDs |
+  |---|---|---|---|---|
+  | `10.1` (HMI, servido por ele) | 200 202 222 | | `d1.2` | 430 432 c10 |
+  | `15.2` / `15.3` | 400 511 512 513 516 / 501 502 503 506 | | `d7.1` | 062 |
+  | `24.1` | 120 437 | | `d8.1` | 301 302 303 304 c05 |
+  | `31.2` | 120 200 202 410 412 413 431 450 | | `d9.1` | 200 |
+  | `32.1` | 094 120 200 201 202 205 206 413 420 431 450 457 458 470 471 474 478 479 492 500 501 c31 | | `db.1` | 094 |
+  | `40.1` | 120 206 450 451 452 c0d c0f c10 c14 c16 | | `dc.1` | c58 c5a |
+  | `42.1` | 094 120 206 c30 c31 | | `df.1` | 208 |
+  | `43.2` | 120 c08 c14 | | `e7.1/2/3` | c00 c10 c11 c13 c14 c31 |
+  | `44.1` | 120 c92 ca1 | | `eb.1/2/3` | c00 c10 |
+  | `be.1` | d2f d30 d31 | | `ed.1` | 094 c51 c75 |
+  | `ce.2` | c56 | | `cf.1` (HMI, servido por ele) | 200 |
+
+  Sem registro, o HMI não pede nada fora do `E5` (0xCA.0 `0x247`, 0xD1.2, 0xD7, 0xD8, 0xD9 aparecem sozinhos). Nenhum tipo de mensagem MTP além do MOST (`[2]=2`) sai do HMI.
+* **Ainda não funciona:** anunciar todos esses FBlocks não habilita **Fahrzeuginfo** nem **Einstellungen**, que ficam cinza no Hauptmenü (medido: registro dos 27 FBlocks e 25 s de espera,
+  rotor até Fahrzeuginfo e aperto). Falta responder com `Status` no formato certo de cada FktID, e esse formato só sai do código dos proxies `CPxyVehicle…` do `HmiMain` (desmontagem com
+  `tools/cic/elfx.py`). Candidatos pelo número de funções e pelo nome do FBlock na lista acima: `e7`/`eb` (três instâncias com as mesmas funções), `d8`, `be`, `dc`, `ed`. Nenhum mapeamento
+  de velocidade, temperatura, bornes ou check-control foi verificado, então a aba CAN ainda **não** dirige o CIC.
+* O stub do HmiMain mudou (copia o envio de todos os FBlocks): `patch_flash_file` troca o stub em imagens já montadas (`tests/test_cic_userfiles.py`).
 
 ## O que falta (nesta ordem)
 1. **IO-Controller** (botões, rotor, CAN, liga/desliga): é um microcontrolador **ST10** (o `sysregs-l6-7534.cfg` diz "controlled by ST10") com firmware nos pacotes

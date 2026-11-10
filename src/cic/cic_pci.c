@@ -220,6 +220,8 @@ static void ipc_ioc_tick(void *o)
  * Canal 2 (on/off): mensagens de 9 bytes nos dois sentidos. [0]=0x12 versão, [1]=motivo de wake-up, [3]=estado externo
  * (bits 0-3 MOST, bit 4 CAN), [4]=Ethernet da IOC (1/2), [5]=tensão bruta, [6]=evento (0 = nenhum), [7]=parâmetro do evento.
  */
+volatile int cic_ioc_volt;
+
 static void ipc_ch2_tick(void *o)
 {
     uint8_t f[2 + 9] = { 9, 2, 0x12, 0x06, 0x00, 0x00, 0x01, 0x74, 0x00, 0x00, 0x02 };
@@ -228,6 +230,11 @@ static void ipc_ch2_tick(void *o)
     }
     if (getenv("CIC_IOC3")) {
         f[5] = strtoul(getenv("CIC_IOC3"), NULL, 0);         /* estado externo (MOST/CAN) */
+    }
+    if (cic_ioc_volt > 0) {
+        f[7] = cic_ioc_volt > 255 ? 255 : cic_ioc_volt;     /* tensão da bateria (0,1 V), ajustada em tempo de execução ("v <décimos>" no CIC_INPUT) */
+    } else if (getenv("CIC_VOLT")) {
+        f[7] = strtoul(getenv("CIC_VOLT"), NULL, 0);
     }
     if (ipc.rxc >= 8) {
         /* o driver parou de ler (dev-ipc morreu no desligamento): descarta a fila e solta a linha de interrupção */

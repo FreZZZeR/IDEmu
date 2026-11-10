@@ -13,9 +13,35 @@ LIMIT = 0x7ce0000 - 0x4d80000   # flash livre entre 0x4D80000 e a partição HBp
 FFS3_OFF, FFS3_LEN = 4980736 + 73662464, 33554432      # segmento 0x04D80000 (o EFS_RO original, FFS3)
 
 
-def entries(pkg, mapas=False, voz=False):
+def dir_entries(folder):
+    """Árvore de arquivos do usuário -> entradas do imagefs (caminho relativo a /mnt/EFS_RO). Diretórios intermediários entram como 'D';
+    o modo de cada arquivo vem do disco (o bit de execução decide se o QNX roda o binário); .DS_Store e afins ficam de fora."""
+    out = []
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
+        rel = os.path.relpath(root, folder)
+        if rel != '.': out.append((rel.replace(os.sep, '/'), 'D', None, 0o755))
+        for n in sorted(files):
+            if n.startswith('.'): continue
+            p = os.path.join(root, n); r = (n if rel == '.' else rel.replace(os.sep, '/') + '/' + n)
+            if os.path.islink(p): out.append((r, 'L', os.readlink(p), 0o755))
+            elif os.path.isfile(p):
+                with open(p, 'rb') as f: out.append((r, 'F', f.read(), (os.stat(p).st_mode & 0o777) or 0o644))
+    return out
+
+
+def entries(pkg, mapas=False, voz=False, extra=(), log=None):
+    """Entradas do EFS_RO. extra = arquivos do usuário (dir_entries): vencem os do pacote com o mesmo caminho e entram antes das imagens de
+    veículo, que são largadas (as menos importantes primeiro) até tudo caber na flash livre."""
     import ffs3
     f = open(pkg, 'rb'); off = START; out = []; seen = set()
+    try: return _entries(f, off, seen, mapas, voz, extra, log)
+    finally: f.close()
+
+
+def _entries(f, off, seen, mapas, voz, extra, log):
+    import ffs3
+    out = []
     # conteúdo do FFS3 original: Hmi/data/ro (ResDB.menu/bitmap/text..., sem eles o HMI não carrega a GUI), DSP, icu, opt...
     f.seek(FFS3_OFF)
     orig = {p: (p, k, d, m) for p, k, d, m in ffs3.walk(f.read(FFS3_LEN))}
@@ -47,9 +73,19 @@ def entries(pkg, mapas=False, voz=False):
             vehicles.append(e); continue
         if p not in merged or merged[p][1] == 'L':
             merged[p] = e
+    for e in extra:
+        p = e[0].strip('/')
+        old = merged.get(p)
+        if old and (old[1] == 'D') != (e[1] == 'D'):
+            raise ValueError('"%s" do usuário (%s) colide com uma entrada do EFS_RO de outro tipo (%s)' % (p, e[1], old[1]))
+        if old and e[1] != 'D':
+            if log: log('arquivo do usuário substitui /mnt/EFS_RO/%s' % p)
+        if not old or e[1] != 'D': merged[p] = (p,) + tuple(e[1:])
     out = list(merged.values())
     # imagens de veículo (~1,3 MB cada): só as que couberem na flash livre
     used = sum(len(d) + 512 for p, k, d, m in out if k == 'F') + 64 * len(out)
+    if extra and used > LIMIT - (1 << 20):
+        raise ValueError('os arquivos do usuário não cabem no EFS_RO: %.1f MB de %.1f MB livres (sem as imagens de veículo)' % (used / 1048576., (LIMIT - (1 << 20)) / 1048576.))
     pref = ('e90', 'f10', 'f30', 'e60', 'f01', 'e70', 'f25', 'e84', 'f20', 'e87', 'e92', 'e93', 'f07', 'e71', 'f11', 'e89')
     vehicles.sort(key=lambda e: pref.index(e[0].rsplit('-', 1)[1]) if e[0].rsplit('-', 1)[1] in pref else 99)
     if vehicles and 'res' not in merged:
@@ -60,8 +96,8 @@ def entries(pkg, mapas=False, voz=False):
         out.append(e); used += len(e[2]) + 512
     return out
 
-def build(pkg, dst, mapas=False, voz=False):
-    img = mkimagefs.build(entries(pkg, mapas, voz))
+def build(pkg, dst, mapas=False, voz=False, extra=(), log=None):
+    img = mkimagefs.build(entries(pkg, mapas, voz, extra, log))
     assert len(img) <= LIMIT, 'imagefs de %d bytes não cabe na flash livre (%d)' % (len(img), LIMIT)
     open(dst, 'wb').write(img)
     return len(img)

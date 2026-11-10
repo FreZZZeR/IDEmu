@@ -12,7 +12,7 @@ No emulador o MOST não existe (dev-mlb sem hardware); então os telegramas MTP 
 * o QEMU (src/cic/cic.c) recebe os telegramas pelo socket CIC_INPUT ("t <hex>") e os entrega pelo hypercall:
   op 0 = classificar (r4 = this, r5 = buf; devolve 2 = criar a thread, 0 = thread real, 1 = thread de injeção), op 1 = próximo telegrama
   (devolve o tamanho, 0 = nenhum), op 2 = palavra de 32 bits do telegrama atual no deslocamento r4.
-* no envio (bsrf em 0x08d084fa para sendMsg), os telegramas MOST do HMI para o FBlock 0xE5 são copiados para o QEMU (op 3 = início com
+* no envio (bsrf em 0x08d084fa para sendMsg), os telegramas MOST do HMI (para qualquer FBlock) são copiados para o QEMU (op 3 = início com
   r4 = tamanho, op 4 = byte r5 no deslocamento r4, op 5 = fim), que os repassa ao IDEmu (CIC_OUTPUT): é assim que o controlador virtual
   responde, por exemplo, ao RotaryEncoderConfig.Set do HMI.
 """
@@ -133,14 +133,13 @@ def stub():
     a.lds_pr_pop()
     for r in (11, 10, 9): a.movl_pop(r)
     a.rts(); a.movl_pop(8)
-    # ---- envio (r4 = canal, r5 = buf, r6 = tamanho): copia para o QEMU os telegramas MOST para 0xE5 e chama o sendMsg original
+    # ---- envio (r4 = canal, r5 = buf, r6 = tamanho): copia para o QEMU os telegramas MOST do HMI (todos os FBlocks) e chama o sendMsg original
     a.label('tx')
     for r in (8, 9, 10, 11): a.movl_push(r)
     a.sts_pr_push()
     a.mov(4, 8); a.mov(5, 9); a.mov(6, 10)
     a.movi(12, 1); a.cmpgt(1, 10); a.bf('txcall')                     # tamanho > 12
     a.movb_ld0(2, 9); a.cmpeqi(2); a.bf('txcall')
-    a.movb_ld0(6, 9); a.cmpeqi(0xe5); a.bf('txcall')
     a.mov(10, 4); a.lit(MAGIC | 3, 0); a.trapa(TRAPA)
     a.movi(0, 11)
     a.label('txb')
@@ -157,8 +156,23 @@ def stub():
     return code, a.labels['tx']
 
 
+# vdev-flexgps: FlexGPS_Telegramm_observe() confere os telegramas UBX cíclicos por segundo e devolve != 0 quando faltam ("da Diskrepanz Ubx Telegramm Anzahl HW
+# reseten", "GPS communication faulty"), e o gerente reseta o receptor. As classes UBX que o firmware do Atmel liga por CFG-MSG (02/21, 02/22, 03/02..06, 0c/0c)
+# não são as do u-blox e o conteúdo delas não é conhecido; com o receptor virtual (idemu/antaris.py) a conta nunca fecha e o GPS reiniciava a cada ~15 s. Todos os
+# retornos da função passam por "mov.l @r15,r0" no fim (0x08044daa): vira "mov #0,r0" (o log continua, o resultado é sempre "ok").
+FLEXGPS_OLD = bytes.fromhex('522ff260087f264f')
+FLEXGPS_NEW = bytes.fromhex('522f00e0087f264f')
+
+
+def patch_flexgps(data):
+    if data.count(FLEXGPS_OLD) == 1:
+        return data.replace(FLEXGPS_OLD, FLEXGPS_NEW)
+    return data
+
+
 def patch_ifs2(data):
     """aplica o patch no IFS2 (bytes); devolve os bytes alterados."""
+    data = patch_flexgps(data)
     assert data.count(ANCHOR) == 1, 'HmiMain: laço do MTP não achado no IFS2'
     o = data.index(ANCHOR)
     off = lambda va: o + (va - ANCHOR_VA)
@@ -177,17 +191,24 @@ IFS2_OFF, IFS2_LEN = 0x740000, 73662464     # segmento IFS2 na flash NOR (run.FL
 
 
 def patch_flash_file(path):
-    """aplica o patch numa flash.img já montada (idempotente). Devolve 'ok' (já tinha), 'patched' ou levanta erro."""
+    """aplica o patch numa flash.img já montada (idempotente; atualiza o stub se ele mudou). Devolve 'ok' (já tinha), 'patched' ou levanta erro."""
     with open(path, 'r+b') as f:
         f.seek(IFS2_OFF)
         data = f.read(IFS2_LEN)
         o = data.find(ANCHOR)
         assert o >= 0, 'HmiMain: laço do MTP não achado na flash'
-        code, _ = stub()
-        c = o + (CAVE_VA - ANCHOR_VA)
-        if data[c:c + len(code)] == code:
+        code, tx = stub()
+        off = lambda va: o + (va - ANCHOR_VA)
+        c = off(CAVE_VA)
+        if struct.unpack_from('<I', data, off(LIT_VA))[0] == (RECV_VA - LIT_BASE) & 0xffffffff:
+            new = patch_ifs2(data)                    # imagem ainda sem o patch
+        else:
+            b = bytearray(data)                       # já tem o patch: troca o stub (e o destino do envio, que depende do tamanho dele)
+            b[c:c + len(code)] = code
+            struct.pack_into('<I', b, off(TXLIT_VA), (tx - TXLIT_BASE) & 0xffffffff)
+            new = patch_flexgps(bytes(b))             # imagens montadas antes do patch do GPS
+        if new == data:
             return 'ok'
-        new = patch_ifs2(data)
         f.seek(IFS2_OFF)
         f.write(new)
     return 'patched'

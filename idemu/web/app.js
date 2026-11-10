@@ -95,7 +95,7 @@
     function huName(v) { const x = ((IDE.catalog && IDE.catalog.hu_variants) || []).find((y) => y.id === (v || 'professional')); return x ? x.name : 'Navigation Professional'; }
     function bootRow(e, running) {
       const sn = e.snapshot || {};
-      if (e.kind === 'cic' || e.kind === 'mgu22') return null;          // sem estado salvo (boot rápido) no iDrive 4 e 8
+      if (e.kind === 'cic' || e.kind === 'mgu22') return null;          // sem estado salvo (boot rápido) no CIC e iDrive 8
       const cb = h('input', { type: 'checkbox', checked: e.fast_boot !== false, disabled: running, 'aria-label': 'Fast boot', onchange: async () => { try { await post('/api/env/' + e.id + '/update', { fast_boot: cb.checked }); await IDE.refreshState(); } catch (er) { toastErr(er); } } });
       const cold = h('button', { class: 'link', type: 'button', disabled: running || !!IDE.state.running, onclick: (ev) => startEnv(e, ev.currentTarget, true) }, 'Full boot');
       const del = sn.valid ? h('button', { class: 'link', type: 'button', disabled: running, onclick: async () => { try { await post('/api/env/' + e.id + '/snapshot/delete'); await IDE.refreshState(); } catch (er) { toastErr(er); } } }, 'Delete saved state') : null;
@@ -126,7 +126,7 @@
       actions.push(bb);
       const bc = btn('', 'gear', 'Coding', () => IDE.go('coding/' + e.id), 'Edit the coding of this head unit');
       bc.disabled = bs !== 'ready' || e.kind === 'cic';
-      if (e.kind === 'cic') bc.title = IDE.t('a edição de codificação ainda não existe para o iDrive 4');
+      if (e.kind === 'cic') bc.title = IDE.t('a edição de codificação ainda não existe para o CIC');
       actions.push(bc);
       const bf = btn('', 'folder', 'Arquivos', () => IDE.sysFilesDialog(e), 'Ver os arquivos do sistema do iDrive, descompactados');
       bf.disabled = bs !== 'ready' && !!e.kind;

@@ -1,9 +1,9 @@
 'use strict';
-/* IDEmu – arquivos do sistema (SWFL) do iDrive 4, 7 e 8: lista com os nomes exigidos, escolha um a um, vários de uma vez, ou busca numa pasta.
+/* IDEmu – arquivos do sistema (SWFL) do CIC, iDrive 7 e 8: lista com os nomes exigidos, escolha um a um, vários de uma vez, ou busca numa pasta.
    IDE.pkgPanel(kind, {onChange(status)}) -> elemento (com .status e .reload()); IDE.filesSetup() -> painel completo com a escolha da geração. */
 (function (IDE) {
   const { h, ic, api, post, toast, toastErr } = IDE;
-  const KINDS = [['cic', 'iDrive 4 (CIC)'], ['mgu7', 'iDrive 7'], ['mgu22', 'iDrive 8']];
+  const KINDS = [['cic', 'CIC'], ['mgu7', 'iDrive 7'], ['mgu22', 'iDrive 8']];
 
   async function pickNative(kind, prompt, start) {
     if (window.idemuNative) { try { return { native: true, r: await window.idemuNative.pick(kind, prompt, start) }; } catch (e) { /* cai no seletor do servidor */ } }

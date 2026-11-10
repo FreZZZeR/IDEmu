@@ -5,7 +5,7 @@ Por geração:
   iDrive 5/6 (NBT Evo)  os três SWFL do ambiente (sistema, marca, HMI), bloco a bloco: <pasta>/os, /brand, /hmi (caminhos como na head unit: fs/sda0/...)
   iDrive 7 (MGU)        os 18 pacotes HAR + o kernel, como na montagem da imagem: a raiz Linux do RSE/HU em <pasta>/root e o kernel em <pasta>/kernel
   iDrive 8 (MGU22)      a raiz montada (mgu22/base.cpio: sistema, IVI, EXT e os dados SWFK), em <pasta>/root
-  iDrive 4 (CIC)        o IFS de boot (QNX imagefs) em <pasta>/IFS e o EFS_RO (FFS3 + tar.gz do HD) em <pasta>/EFS_RO
+  CIC        o IFS de boot (QNX imagefs) em <pasta>/IFS e o EFS_RO (FFS3 + tar.gz do HD) em <pasta>/EFS_RO
 
 A pasta fica no ambiente (iDrive 5/6) ou junto da imagem compartilhada da geração (mgu7/, mgu22/, cic/). Os caminhos pedidos pela API são sempre
 relativos a ela e conferidos (nada de .. nem de seguir links simbólicos para fora)."""
@@ -55,7 +55,7 @@ def source_label(env):
     k = env.get('kind')
     if k == 'mgu7': return 'Pacotes HAR do iDrive 7 (18 + kernel)'
     if k == 'mgu22': return 'Raiz montada do iDrive 8 (sistema, IVI, EXT e dados SWFK)'
-    if k == 'cic': return 'IFS de boot e EFS_RO do iDrive 4'
+    if k == 'cic': return 'IFS de boot e EFS_RO do CIC'
     return 'Os três SWFL do ambiente (sistema, marca e HMI)'
 
 
@@ -204,7 +204,7 @@ def _extract_cic(out, prog):
                 except OSError: pass
             elif kind == 'F':
                 with open(dst, 'wb') as o: o.write(data)
-    if not os.listdir(out): raise ValueError('a imagem do iDrive 4 ainda não foi montada: compile o ambiente primeiro')
+    if not os.listdir(out): raise ValueError('a imagem do CIC ainda não foi montada: compile o ambiente primeiro')
 
 def _write_tree(base, items):
     for nm, t, a, b, mode, img in items:

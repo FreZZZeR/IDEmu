@@ -623,7 +623,7 @@
     /* ---------------- criar + build ---------------- */
     function bodyFromState() {
       if (genObj() && genObj().direct) return { kind: genObj().direct, home: W.home || '', role: genObj().direct === 'mgu7' ? W.role : undefined,
-        coding: W.vin ? { vin: W.vin.vin } : undefined, model_name: W.vin && W.vin.env ? [W.vin.chassis, W.vin.env.model_name].filter(Boolean).join(' ') : undefined, name: W.nameTouched && W.name.trim() ? W.name.trim() : genObj().name + (genObj().direct === 'mgu7' ? (W.role === 'rse' ? ' RSE' : ' CID') : genObj().direct === 'cic' ? ' CIC' : ' G70') };
+        coding: W.vin ? { vin: W.vin.vin } : undefined, model_name: W.vin && W.vin.env ? [W.vin.chassis, W.vin.env.model_name].filter(Boolean).join(' ') : undefined, name: W.nameTouched && W.name.trim() ? W.name.trim() : genObj().name + (genObj().direct === 'mgu7' ? (W.role === 'rse' ? ' RSE' : ' CID') : genObj().direct === 'cic' ? '' : ' G70') };
       return {
         home: W.home || '', name: W.name.trim(), series: W.series, chassis: W.chassis, brand: brand(),
         swfl: Object.fromEntries(Object.keys(W.swfl).map((k) => [k, W.swfl[k].path])),

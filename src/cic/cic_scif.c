@@ -40,6 +40,7 @@ struct CicScif {
     MemoryRegion iomem;
     CharFrontend chr;
     qemu_irq eri, rxi, bri, txi;
+    bool single_irq;
     uint16_t smr, scr, fsr, fcr, sptr, lsr, rer;
     uint8_t brr;
     uint8_t rx[RXFIFO];
@@ -65,10 +66,18 @@ static int rtrg(CicScif *s)
 
 static void cic_scif_irq(CicScif *s)
 {
-    qemu_set_irq(s->txi, (s->scr & SCSCR_TIE) && (s->fsr & FSR_TDFE));
-    qemu_set_irq(s->rxi, (s->scr & SCSCR_RIE) && (s->fsr & (FSR_RDF | FSR_DR)));
-    qemu_set_irq(s->eri, (s->scr & SCSCR_REIE) && (s->fsr & FSR_ER));
-    qemu_set_irq(s->bri, (s->scr & SCSCR_REIE) && (s->fsr & FSR_BRK));
+    bool tx = (s->scr & SCSCR_TIE) && (s->fsr & FSR_TDFE);
+    bool rx = (s->scr & SCSCR_RIE) && (s->fsr & (FSR_RDF | FSR_DR));
+    bool er = (s->scr & SCSCR_REIE) && (s->fsr & FSR_ER);
+    bool br = (s->scr & SCSCR_REIE) && (s->fsr & FSR_BRK);
+    if (s->single_irq) {                 /* SCIF2..5 do SH7785: um vetor só para os quatro eventos (ligado em txi) */
+        qemu_set_irq(s->txi, tx || rx || er || br);
+        return;
+    }
+    qemu_set_irq(s->txi, tx);
+    qemu_set_irq(s->rxi, rx);
+    qemu_set_irq(s->eri, er);
+    qemu_set_irq(s->bri, br);
 }
 
 static void cic_scif_tx_tick(void *opaque)
@@ -251,6 +260,7 @@ static void cic_scif_realize(DeviceState *d, Error **errp)
 
 static const Property cic_scif_props[] = {
     DEFINE_PROP_CHR("chardev", CicScif, chr),
+    DEFINE_PROP_BOOL("single-irq", CicScif, single_irq, false),
 };
 
 static void cic_scif_class_init(ObjectClass *oc, const void *data)
